@@ -1,0 +1,17 @@
+# local cruft
+*.tmp
+*.output
+*.log
+.DS_Store
+# secrets must never land here (configs with PrivateKey/PresharedKey, sudoers copies)
+*.key
+*-private.conf
+secrets/
+# Serena agent workspace
+.serena/
+# Claude Code local/session state (scheduled-task locks etc.)
+.claude/
+# agent/editor tooling configs (local)
+.mcp.json
+opencode.json
+.opencode/

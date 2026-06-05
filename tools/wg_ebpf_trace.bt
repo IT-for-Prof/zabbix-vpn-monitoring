@@ -1,0 +1,5 @@
+kprobe:__icmp_send { @icmp4_send_type_code[arg1, arg2] = count(); }  /* frag-needed = (3,4) */
+kprobe:icmp6_send  { @icmp6_send_type[arg1] = count(); }              /* packet-too-big = 2 */
+tracepoint:tcp:tcp_retransmit_skb { @tcp_retransmit = count(); }
+tracepoint:skb:kfree_skb { @kfree_by_reason[args->reason] = count(); }
+interval:s:30 { printf("done\n"); exit(); }
