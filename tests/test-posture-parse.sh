@@ -32,7 +32,7 @@ check "iface as last token on line -> 1" 1 "$(printf 'tcp option maxseg size set
 check "iface substring not matched (wg00)" 0 "$(printf '%s\n' "$IPT_SETMSS" | parse_clamp_linux wg)"
 check "empty ruleset -> 0"               0 "$(printf '' | parse_clamp_linux wg0)"
 
-echo "== parse_clamp_freebsd (real pf03 sample) =="
+echo "== parse_clamp_freebsd (FreeBSD pfctl sample) =="
 PFCTL='scrub on tun_wg0 inet all no-df fragment reassemble
 scrub on tun_wg2 inet all no-df max-mss 1380 fragment reassemble
 scrub on tun_wg3 inet all no-df max-mss 1380 fragment reassemble
