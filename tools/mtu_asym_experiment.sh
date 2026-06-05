@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Controlled reproduction of the pf03 asymmetric-MTU / unclamped-TCP black hole, in netns.
+# Controlled reproduction of a forwarding-gateway asymmetric-MTU / unclamped-TCP black hole, in netns.
 # Topology (mirrors incident):
 #   SRV --1500-- A(wgA, forwards) ==underlay(frag-drop)== EX(wgB 1420) --1500-- CLI
 # Large flow SRV->CLI: end-to-end MSS 1460 (neither tunnel end clamps); A forwards full-size
