@@ -6,7 +6,7 @@ zabbix_export:
   templates:
     - uuid: 59d3b052df88477c8c6d8fd14b5f2229
       template: 'VPN Tunnel MTU by Zabbix agent'
-      name: 'VPN Tunnel MTU (Custom)'
+      name: 'VPN Tunnel MTU by Zabbix agent'
       description: |
         WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so roaming/mobile peers do not false-page; plus a monitoring-blind watchdog (no wg data) and a probe-capability canary. Active agent checks; cap_net_raw on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. WireGuard is the first discovery backend (the probe itself is VPN-agnostic). Note: the monitoring-blind watchdog keys on wg.count, so it only guards WireGuard hosts — for OpenVPN/ZeroTier-only hosts rely on the base "Linux by Zabbix agent active" agent-availability trigger instead.
 

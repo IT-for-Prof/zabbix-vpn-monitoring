@@ -5,7 +5,7 @@ Zabbix monitoring for VPN / overlay tunnels — detection of **silent MTU/PMTU b
 
 One **technology-agnostic ICMP-DF MTU probe** (shared `lib/`) plus **per-technology liveness
 collectors** (`collectors/`), across **WireGuard/AmneziaWG, ZeroTier, and OpenVPN** (community +
-Access Server) — a single Zabbix template (`templates/wireguard-vpn-exit.yaml`), one self-gating LLD
+Access Server) — a single Zabbix template (`templates/vpn-tunnel-mtu.yaml`), one self-gating LLD
 rule per tech (absent tech ⇒ no items). A separate **config-plane MTU-posture** check catches the
 misconfiguration the active probe is structurally blind to, and runs on Linux *and* FreeBSD/pfSense.
 
