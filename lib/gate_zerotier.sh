@@ -9,8 +9,8 @@
 # NOTE: ZT liveness is binary — an OK network always stamps "now", so VPN_LIVE_FRESH never trips for ZT.
 set -u
 ifc=${1:?usage: gate_zerotier.sh <iface> [target]}
-raw=$( zerotier-cli -j listnetworks 2>/dev/null || sudo -n zerotier-cli -j listnetworks 2>/dev/null )
-[ -n "$raw" ] || exit 0                          # CLI missing/failed/empty -> fail-safe (probe ungated)
+raw=$( zerotier-cli -j listnetworks 2>/dev/null || { command -v zerotier-cli >/dev/null 2>&1 && sudo -n zerotier-cli -j listnetworks 2>/dev/null; } )
+[ -n "$raw" ] || exit 0                          # CLI missing/failed/empty -> fail-safe (probe ungated). sudo -n ONLY if zerotier-cli exists (else no failed-sudo on non-ZT hosts)
 st=$(printf '%s' "$raw" | python3 -c '
 import json,sys
 try:

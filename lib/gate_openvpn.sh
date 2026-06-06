@@ -25,10 +25,13 @@ status_text() {   # emit the raw status text (TAB/comma/JSON) for this iface's i
       [ -f "$cfg" ] || continue
       grep -qiE "^[[:space:]]*dev([[:space:]]+|-node[[:space:]]+/dev/)$ifc([[:space:]]|\$)" "$cfg" 2>/dev/null || continue
       sfile=$(awk 'tolower($1)=="status"{print $2; exit}' "$cfg" 2>/dev/null)
-      if [ -n "$sfile" ]; then { cat "$sfile" 2>/dev/null || sudo -n cat "$sfile" 2>/dev/null; }; return; fi
+      # Read the status file directly only. `cat`/`socat` are NOT in the agent's sudoers (never were),
+      # so a `sudo -n cat` fallback only ever logged a failed-sudo. If the file isn't readable by the
+      # zabbix user, make it group-readable (deploy step) — don't sudo it.
+      if [ -n "$sfile" ]; then cat "$sfile" 2>/dev/null; return; fi
       sock=$(awk 'tolower($1)=="management"{print $2; exit}' "$cfg" 2>/dev/null)
       if [ -n "$sock" ] && [ -S "$sock" ]; then
-        printf 'status 3\nquit\n' | { socat - "UNIX-CONNECT:$sock" 2>/dev/null || sudo -n socat - "UNIX-CONNECT:$sock" 2>/dev/null; }; return
+        printf 'status 3\nquit\n' | socat - "UNIX-CONNECT:$sock" 2>/dev/null; return
       fi
     done
   done

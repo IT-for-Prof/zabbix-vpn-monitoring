@@ -58,15 +58,19 @@ parse_mtu_freebsd() {  # stdin: ifconfig <iface>
 
 # ===================== command gatherers (call the live tools) =====================
 
-priv() { "$@" 2>/dev/null || sudo -n "$@" 2>/dev/null; }   # direct, then unprivileged-sudo fallback
+# Direct call first; fall back to `sudo -n` ONLY if the binary exists. Never sudo an absent
+# command — that logs a failed-sudo ("a password is required" / "command not allowed") every poll,
+# which trips host security monitoring. The granted sudoers cover exactly the privileged reads below.
+priv() { "$@" 2>/dev/null && return 0; command -v "$1" >/dev/null 2>&1 && sudo -n "$@" 2>/dev/null; }
 
 # WireGuard/AmneziaWG only. `wg show interfaces` is authoritative on both Linux and FreeBSD
 # (pfSense WG ifaces are tun_wgN and answer wg(8)). awg mirrors wg's CLI. OpenVPN/ZeroTier are
 # excluded: their MTU model differs (mssfix/fragment, ~2800), so a 1420 ceiling + clamp check
-# would false-positive. Unions direct + sudo enumeration; on Linux also the kernel link list.
+# would false-positive. Enumeration is UNPRIVILEGED — `wg show interfaces` lists names for any user,
+# so we NEVER sudo it (doing so logged a failed-sudo every discovery poll). On Linux also union the
+# kernel link list. Only the per-iface allowed-ips/clamp reads below need (granted) privilege.
 list_ifaces() {
-  { wg show interfaces 2>/dev/null;        awg show interfaces 2>/dev/null
-    sudo -n wg show interfaces 2>/dev/null; sudo -n awg show interfaces 2>/dev/null
+  { wg show interfaces 2>/dev/null; awg show interfaces 2>/dev/null
     [ "$OS" != FreeBSD ] && ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' | sed 's/@.*//'
   } | tr ' ' '\n' | grep -v '^$' | sort -u
 }

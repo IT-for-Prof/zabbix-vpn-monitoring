@@ -148,10 +148,17 @@ for B in wg awg; do
   else
     echo "WARN: zabbix cannot 'sudo $B show ... latest-handshakes' — probe fail-safes to Phase-1 (offline peers read -1, not -2)"
   fi
-  if sudo -u zabbix sudo -n "$B" show all dump >/dev/null 2>&1; then
-    echo "WARN: sudoers also permits '$B show ... dump' (key exposure) — tighten the rule"
+  # Assert `dump` is NOT granted by INSPECTING the policy (sudo -l), not by executing a denied
+  # command — running `sudo -n wg show all dump` would log a failed-sudo and trip host security alerts.
+  # Match any dump grant form (`* dump`, `all dump`, ...); and only declare key-safe when the policy
+  # was actually readable (it lists the expected reads) — an empty/unreadable -l must NOT read as safe.
+  pol=$(sudo -n -l -U zabbix 2>/dev/null)
+  if printf '%s\n' "$pol" | grep -qE "/$B( show)? .*dump"; then
+    echo "WARN: sudoers permits '$B ... dump' (key exposure) — tighten the rule"
+  elif printf '%s\n' "$pol" | grep -qE "/$B show .*(allowed-ips|latest-handshakes)"; then
+    echo "least-privilege: '$B show ... dump' not granted (key-safe)"
   else
-    echo "least-privilege: '$B show ... dump' correctly denied"
+    echo "note: could not read zabbix sudo policy — manually verify '$B ... dump' is not granted"
   fi
 done
 if [ -n "$NEED_RESTART" ]; then systemctl restart zabbix-agent2   # Timeout change needs a restart

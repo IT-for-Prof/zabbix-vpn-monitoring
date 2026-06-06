@@ -26,7 +26,7 @@ target_for() {   # prefer the default-route via, else the first `via` gateway on
     END { print (def!="" ? def : first) }'
 }
 
-raw=$( zerotier-cli -j listnetworks 2>/dev/null || sudo -n zerotier-cli -j listnetworks 2>/dev/null )
+raw=$( zerotier-cli -j listnetworks 2>/dev/null || { command -v zerotier-cli >/dev/null 2>&1 && sudo -n zerotier-cli -j listnetworks 2>/dev/null; } )  # sudo -n ONLY if zerotier-cli exists -> no failed-sudo on non-ZT hosts
 ifaces=$(printf '%s' "$raw" | python3 -c '
 import json,sys
 try: nets=json.load(sys.stdin)

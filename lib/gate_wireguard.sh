@@ -14,7 +14,8 @@ set -u
 ifc=${1:?usage: gate_wireguard.sh <iface> <target_ip>}; tgt=${2:?}
 bin=wg; case "$ifc" in awg*) bin=awg;; esac          # AmneziaWG mirrors wg's CLI
 command -v "$bin" >/dev/null 2>&1 || bin=wg          # fall back if awg absent
-show() { "$bin" show "$ifc" "$1" 2>/dev/null || sudo -n "$bin" show "$ifc" "$1" 2>/dev/null; }
+# direct first; sudo -n ONLY if the binary exists (never sudo an absent cmd -> no failed-sudo noise)
+show() { "$bin" show "$ifc" "$1" 2>/dev/null || { command -v "$bin" >/dev/null 2>&1 && sudo -n "$bin" show "$ifc" "$1" 2>/dev/null; }; }
 # allowed-ips: "<pubkey>\t<ip> [ip ...]" per peer -> peer owning <target>/32
 pk=$(show allowed-ips | awk -v t="$tgt/32" '{ for (i=2;i<=NF;i++) if ($i==t) { print $1; exit } }')
 [ -n "$pk" ] || exit 0                               # target not a /32 peer -> let probe run
