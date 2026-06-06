@@ -8,7 +8,7 @@ zabbix_export:
       template: 'VPN Tunnel MTU by Zabbix agent'
       name: 'VPN Tunnel MTU (Custom)'
       description: |
-        WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so roaming/mobile peers do not false-page; plus a monitoring-blind watchdog (no wg data) and a probe-capability canary. Active agent checks; cap_net_raw on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. WireGuard is the first discovery backend (the probe itself is VPN-agnostic).
+        WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so roaming/mobile peers do not false-page; plus a monitoring-blind watchdog (no wg data) and a probe-capability canary. Active agent checks; cap_net_raw on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. WireGuard is the first discovery backend (the probe itself is VPN-agnostic). Note: the monitoring-blind watchdog keys on wg.count, so it only guards WireGuard hosts — for OpenVPN/ZeroTier-only hosts rely on the base "Linux by Zabbix agent active" agent-availability trigger instead.
 
         Author:  Konstantin Tyutyunnik / Константин Тютюнник
         Site:    https://itforprof.com
@@ -16,7 +16,7 @@ zabbix_export:
         License: MIT (c) 2026 Konstantin Tyutyunnik
       vendor:
         name: itforprof.com
-        version: 1.0.0
+        version: 1.1.0
       groups:
         - name: Templates/Custom
       items:
@@ -24,16 +24,17 @@ zabbix_export:
           name: 'WireGuard: interface count'
           type: ZABBIX_ACTIVE
           key: wg.count
-          description: 'Count of wg interfaces; backs the monitoring-blind watchdog.'
+          delay: 1m
+          description: 'Count of WireGuard + AmneziaWG interfaces (the UserParameter unions both); backs the monitoring-blind watchdog. Explicit 1m cadence so the nodata({$VPN.WATCHDOG.WINDOW}) detection window can never widen on a global-default change.'
           tags:
             - tag: component
               value: wireguard
           triggers:
             - uuid: 54fba6edb09a407bb9243248bac70f87
-              expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+              expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
               name: 'WireGuard: monitoring blind on {HOST.NAME}'
               priority: HIGH
-              description: 'No wg data for 30m — agent/scripts/active-checks broken.'
+              description: 'No wg data for {$VPN.WATCHDOG.WINDOW} — agent/scripts/active-checks broken.'
               tags:
                 - tag: scope
                   value: availability
@@ -73,8 +74,7 @@ zabbix_export:
               key: 'vpn.posture.mtu[{#VPN_IFACE}]'
               delay: 10m
               value_type: UNSIGNED
-              units: B
-              description: 'Configured MTU of the WireGuard interface (config-plane read). In this estate (WG over an internet/Xray underlay) anything >= 1500 silently black-holes large/forwarded traffic — the config that caused the proxy config-sync incident.'
+              description: 'Configured MTU of the WireGuard interface (config-plane read). No units set on purpose: Zabbix 1024-prefixes the "B" unit, so an MTU of 1420 would render as "1.39 KB" — we want the raw 1420. In this estate (WG over an internet/Xray underlay) anything >= 1500 silently black-holes large/forwarded traffic — the config that caused the proxy config-sync incident.'
               tags:
                 - tag: scope
                   value: mtu-posture
@@ -84,11 +84,12 @@ zabbix_export:
                 - uuid: 3ddb761cdaea445499e4ae57eddf7c29
                   expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],#2)>{$VPN.MTU.MAX}'
                   name: 'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}'
+                  opdata: 'MTU {ITEM.LASTVALUE1} B (ceiling {$VPN.MTU.MAX})'
                   priority: WARNING
                   description: 'The WG interface MTU ({ITEM.LASTVALUE}) exceeds the safe ceiling {$VPN.MTU.MAX} for its underlay -> large/forwarded packets silently black-hole. Lower the iface MTU (and add an MSS clamp). Config-plane check: does not flap, immune to channel-down false positives. Hysteresis min(#2) avoids a single bad read.'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu-posture
@@ -122,15 +123,16 @@ zabbix_export:
                   value: '{#VPN_IFACE}'
               trigger_prototypes:
                 - uuid: 506da2ec3185425ab44ec378dbbffd3c
-                  expression: 'last(/VPN Tunnel MTU by Zabbix agent/vpn.posture.fwd[{#VPN_IFACE}])=1 and last(/VPN Tunnel MTU by Zabbix agent/vpn.posture.clamp[{#VPN_IFACE}])=0'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.fwd[{#VPN_IFACE}],#2)=1 and max(/VPN Tunnel MTU by Zabbix agent/vpn.posture.clamp[{#VPN_IFACE}],#2)=0'
                   name: 'WireGuard {#VPN_IFACE}: forwards transit without MSS clamp on {HOST.NAME}'
+                  opdata: 'forwards={ITEM.LASTVALUE1}, clamp={ITEM.LASTVALUE2}'
                   priority: INFO
                   description: 'Defense-in-depth gap: a gateway forwarding TCP through this tunnel has no MSS clamp. Harmless while the MTU is correct (PMTUD covers it); becomes a silent black hole if the MTU is ever too high or PMTUD breaks (asymmetric routing). Information only — not paged. Suppressed when the MTU-too-high warning fires on the same iface.'
                   dependencies:
                     - name: 'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}'
                       expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],#2)>{$VPN.MTU.MAX}'
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu-posture
@@ -150,7 +152,7 @@ zabbix_export:
               name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU gap'
               type: ZABBIX_ACTIVE
               key: 'vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn]'
-              delay: 5m
+              delay: '{$VPN.PROBE.INTERVAL}'
               value_type: FLOAT
               description: 'Generic probe (OpenVPN). -2 offline (data-only), -1 live but no ICMP (e.g. an OpenVPN-AS client with host firewall — common), 0 healthy, >0 = MTU black-hole gap (bytes). Key uses literal ''openvpn'' (not {#VPN_TECH}) because Zabbix requires unique prototype keys per template and zerotier''s rule owns the {#VPN_TECH} form.'
               valuemap:
@@ -165,12 +167,13 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 8d102e679715443a8a5737a5f35b3595
                   expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],#2)>0'
-                  name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole (gap {ITEM.LASTVALUE} B)'
+                  name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
+                  opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path. (mssfix only protects TCP; a >0 here means non-TCP/UDP traffic black-holes.)'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
@@ -183,7 +186,7 @@ zabbix_export:
                   manual_close: 'YES'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: liveness
@@ -203,7 +206,7 @@ zabbix_export:
               name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: PMTU gap'
               type: ZABBIX_ACTIVE
               key: 'wg.pmtu[{#WG_IFACE},{#WG_TARGET}]'
-              delay: 5m
+              delay: '{$VPN.PROBE.INTERVAL}'
               value_type: FLOAT
               description: '-2 offline (no/stale WireGuard handshake; data-only, not paged), -1 live tunnel but no ICMP reply, 0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes).'
               valuemap:
@@ -216,12 +219,13 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 440a922390684e5a9e480800df71d792
                   expression: 'min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],#2)>0'
-                  name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole (gap {ITEM.LASTVALUE} B)'
+                  name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole'
+                  opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower tunnel MTU or fix the path.'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
@@ -234,7 +238,7 @@ zabbix_export:
                   manual_close: 'YES'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                     - name: 'WireGuard: probe broken on {HOST.NAME}'
                       expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,#2)=0'
                   tags:
@@ -256,7 +260,7 @@ zabbix_export:
               name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: PMTU gap'
               type: ZABBIX_ACTIVE
               key: 'vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}]'
-              delay: 5m
+              delay: '{$VPN.PROBE.INTERVAL}'
               value_type: FLOAT
               description: 'Generic probe shared by non-WireGuard backends. -2 offline (data-only, not paged), -1 live tunnel but no ICMP reply, 0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes).'
               valuemap:
@@ -271,12 +275,13 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 924a12ae1293476691aa656997526cc0
                   expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],#2)>0'
-                  name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole (gap {ITEM.LASTVALUE} B)'
+                  name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
+                  opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path.'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
@@ -289,7 +294,7 @@ zabbix_export:
                   manual_close: 'YES'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
-                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,30m)=1'
+                      expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: liveness
@@ -302,6 +307,12 @@ zabbix_export:
         - macro: '{$VPN.MTU.MAX}'
           value: '1420'
           description: 'Safe MTU ceiling for WireGuard tunnels over an internet/Xray underlay. The posture check pages (Warning) when an iface MTU exceeds this. Override per host/context where a tunnel needs a lower value (e.g. a relay host -> 1340). Sub-ceiling asymmetry (1400 where 1340 is needed) is out of scope — needs cross-host comparison.'
+        - macro: '{$VPN.WATCHDOG.WINDOW}'
+          value: 30m
+          description: 'No-data window for the monitoring-blind watchdog: if wg.count yields nothing for this long, the agent/scripts/active-checks are assumed broken (and per-tunnel/posture alerts are suppressed via dependency to avoid chasing a blind probe). Referenced by the watchdog trigger and every dependency on it. Override per host (e.g. a proxied host with a longer active-check interval).'
+        - macro: '{$VPN.PROBE.INTERVAL}'
+          value: 10m
+          description: 'Poll interval for the active per-tunnel PMTU probe items (wg.pmtu/vpn.pmtu). Each probe does two key-free `wg show` reads via NOPASSWD sudo; an MTU black hole is a config-stable event, so 10m is ample and roughly halves the agent''s sudo rate vs the old 5m (host security tooling alerts on service-account sudo volume). Lower only if you need faster black-hole detection.'
         - macro: '{$VPN.PROBE.TARGETS}'
           description: 'Per-iface probe-target overrides for non-WireGuard tunnels (OpenVPN/ZeroTier). Comma-separated iface=ip list, e.g. "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Read by the per-tech discovery LLD keys; ifaces are unique across techs.'
         - macro: '{$WG.PROBE.TARGETS}'
