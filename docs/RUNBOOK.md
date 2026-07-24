@@ -37,6 +37,7 @@ Defense-in-depth note: a gateway forwards TCP through this tunnel with no MSS cl
 **Posture on FreeBSD/pfSense:** collector at `/root/scripts/vpn_posture.sh`; UserParameters live in the **Zabbix Agent LTS GUI → User Parameters** (a direct conf edit is wiped on GUI save). The active-probe items (`wg.probe.ok`, `wg.discovery`, `openvpn.discovery`, `zerotier.discovery`) are disabled per-host there (Linux-only). See [`DEPLOY-POSTURE.md`](DEPLOY-POSTURE.md).
 
 ## Good to know
+- **Alerts need agreement across `{$VPN.HYST.WINDOW}` (default 25m), not just one bad read.** Every sample in that window must agree before a trigger pages, so expect up to ~25m from "went bad" to "paged" (posture and black-hole alike; the probe-capability canary too). Tunable per host — but if you raise `{$VPN.PROBE.INTERVAL}` somewhere, raise `{$VPN.HYST.WINDOW}` on the same host to ≥2x it, or the window holds a single sample and the hysteresis silently stops working. It is time-based rather than count-based (`#N`) precisely because proxy-group / dual-`ServerActive` hosts write two samples per poll, which made `#2` cover one poll instead of two.
 - The probe is **bisection-bounded** (≤~30s at any MTU); the agent **`Timeout` must be ≥30** (`install.sh` sets it).
 - **`tcp_mtu_probing=1`** (set fleet-wide) lets TCP self-heal through ICMP black holes (PLPMTUD) — complements the probe.
 - The active ICMP-DF probe is the **only** endpoint detector for a *silent* black hole; passive counters and socket-TCP are blind (`tools/mtu_detector_matrix.sh` proves this).

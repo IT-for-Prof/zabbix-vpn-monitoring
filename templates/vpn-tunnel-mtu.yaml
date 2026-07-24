@@ -8,7 +8,7 @@ zabbix_export:
       template: 'VPN Tunnel MTU by Zabbix agent'
       name: 'VPN Tunnel MTU by Zabbix agent'
       description: |
-        WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so roaming/mobile peers do not false-page; plus a monitoring-blind watchdog (no wg data) and a probe-capability canary. Active agent checks; cap_net_raw on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. WireGuard is the first discovery backend (the probe itself is VPN-agnostic). Note: the monitoring-blind watchdog keys on wg.count, so it only guards WireGuard hosts — for OpenVPN/ZeroTier-only hosts rely on the base "Linux by Zabbix agent active" agent-availability trigger instead.
+        WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so roaming/mobile peers do not false-page; plus a config-plane posture check (interface MTU vs {$VPN.MTU.MAX} and MSS-clamp presence — pure sysfs/ruleset reads, no probing, so it flags a misconfigured MTU even while the tunnel is down and never false-positives on a dead channel), a monitoring-blind watchdog (no wg data) and a probe-capability canary. Active agent checks; cap_net_raw on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. Four discovery backends: WireGuard/AmneziaWG posture and probe targets, plus OpenVPN and ZeroTier probe targets (the probe itself is VPN-agnostic; posture is WireGuard-only on purpose — OpenVPN/ZeroTier use a different MTU model, mssfix/fragment ~2800, where a 1420 ceiling would false-positive). Note: the monitoring-blind watchdog keys on wg.count, so it only guards WireGuard hosts — for OpenVPN/ZeroTier-only hosts rely on the base "Linux by Zabbix agent active" agent-availability trigger instead.
 
         Author:  Konstantin Tyutyunnik / Константин Тютюнник
         Site:    https://itforprof.com
@@ -16,7 +16,7 @@ zabbix_export:
         License: MIT (c) 2026 Konstantin Tyutyunnik
       vendor:
         name: itforprof.com
-        version: 1.1.0
+        version: 1.2.0
       groups:
         - name: Templates/Custom
       items:
@@ -53,10 +53,13 @@ zabbix_export:
               value: probe
           triggers:
             - uuid: ad1b664cf93e4132bfb2a9257d132d6a
-              expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,#2)=0'
+              expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
               name: 'WireGuard: probe broken on {HOST.NAME}'
               priority: HIGH
-              description: 'ping cannot send DF packets (cap_net_raw likely lost). Per-tunnel unreachable alerts are suppressed via dependency while this is active — fix the probe, do not chase peers.'
+              description: 'ping cannot send DF packets (cap_net_raw likely lost). Per-tunnel unreachable alerts are suppressed via dependency while this is active — fix the probe, do not chase peers. Itself suppressed by the monitoring-blind watchdog: a silent agent is one alert, not two.'
+              dependencies:
+                - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
               tags:
                 - tag: scope
                   value: probe
@@ -82,11 +85,11 @@ zabbix_export:
                   value: '{#VPN_IFACE}'
               trigger_prototypes:
                 - uuid: 3ddb761cdaea445499e4ae57eddf7c29
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],#2)>{$VPN.MTU.MAX}'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>{$VPN.MTU.MAX} and count(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}'
                   opdata: 'MTU {ITEM.LASTVALUE1} B (ceiling {$VPN.MTU.MAX})'
                   priority: WARNING
-                  description: 'The WG interface MTU ({ITEM.LASTVALUE}) exceeds the safe ceiling {$VPN.MTU.MAX} for its underlay -> large/forwarded packets silently black-hole. Lower the iface MTU (and add an MSS clamp). Config-plane check: does not flap, immune to channel-down false positives. Hysteresis min(#2) avoids a single bad read.'
+                  description: 'The WG interface MTU ({ITEM.LASTVALUE}) exceeds the safe ceiling {$VPN.MTU.MAX} for its underlay -> large/forwarded packets silently black-hole. Lower the iface MTU (and add an MSS clamp). Config-plane check: does not flap, immune to channel-down false positives. Hysteresis over {$VPN.HYST.WINDOW} avoids a single bad read — time-based on purpose, since a count-based #2 collapses to one poll on hosts that write duplicate samples.'
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
@@ -123,14 +126,14 @@ zabbix_export:
                   value: '{#VPN_IFACE}'
               trigger_prototypes:
                 - uuid: 506da2ec3185425ab44ec378dbbffd3c
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.fwd[{#VPN_IFACE}],#2)=1 and max(/VPN Tunnel MTU by Zabbix agent/vpn.posture.clamp[{#VPN_IFACE}],#2)=0'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.fwd[{#VPN_IFACE}],{$VPN.HYST.WINDOW})=1 and max(/VPN Tunnel MTU by Zabbix agent/vpn.posture.clamp[{#VPN_IFACE}],{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.posture.clamp[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#VPN_IFACE}: forwards transit without MSS clamp on {HOST.NAME}'
                   opdata: 'forwards={ITEM.LASTVALUE1}, clamp={ITEM.LASTVALUE2}'
                   priority: INFO
                   description: 'Defense-in-depth gap: a gateway forwarding TCP through this tunnel has no MSS clamp. Harmless while the MTU is correct (PMTUD covers it); becomes a silent black hole if the MTU is ever too high or PMTUD breaks (asymmetric routing). Information only — not paged. Suppressed when the MTU-too-high warning fires on the same iface.'
                   dependencies:
                     - name: 'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}'
-                      expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],#2)>{$VPN.MTU.MAX}'
+                      expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>{$VPN.MTU.MAX} and count(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1'
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
@@ -166,7 +169,7 @@ zabbix_export:
                   value: openvpn
               trigger_prototypes:
                 - uuid: 8d102e679715443a8a5737a5f35b3595
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],#2)>0'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
@@ -178,7 +181,7 @@ zabbix_export:
                     - tag: scope
                       value: mtu
                 - uuid: 026b8482179543538f6585edf856cfef
-                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],#3)=-1'
+                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable'
                   status: DISABLED
                   priority: AVERAGE
@@ -187,6 +190,8 @@ zabbix_export:
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
+                    - name: 'WireGuard: probe broken on {HOST.NAME}'
+                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
                   tags:
                     - tag: scope
                       value: liveness
@@ -208,7 +213,7 @@ zabbix_export:
               key: 'wg.pmtu[{#WG_IFACE},{#WG_TARGET}]'
               delay: '{$VPN.PROBE.INTERVAL}'
               value_type: FLOAT
-              description: '-2 offline (no/stale WireGuard handshake; data-only, not paged), -1 live tunnel but no ICMP reply, 0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes).'
+              description: '-2 offline (no/stale WireGuard handshake; data-only, not paged), -1 live tunnel but no ICMP reply, 0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes). Carries both wg_iface (historical, kept so existing filters/dashboards keep working) and vpn_iface, the cross-technology tag the posture items and the OpenVPN/ZeroTier probes use — without it no single filter collects everything about one interface. No vpn_tech tag on purpose: wg.discovery unions WireGuard and AmneziaWG (wg_discovery.sh: `wg show interfaces` + `awg show interfaces`), so a literal "wireguard" here would mislabel every awg tunnel.'
               valuemap:
                 name: 'VPN PMTU probe state'
               tags:
@@ -216,9 +221,11 @@ zabbix_export:
                   value: mtu
                 - tag: wg_iface
                   value: '{#WG_IFACE}'
+                - tag: vpn_iface
+                  value: '{#WG_IFACE}'
               trigger_prototypes:
                 - uuid: 440a922390684e5a9e480800df71d792
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],#2)>0'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
@@ -230,7 +237,7 @@ zabbix_export:
                     - tag: scope
                       value: mtu
                 - uuid: 41a00e7d6c0a4746888ef6c1f714bc70
-                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],#3)=-1'
+                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: probe target unreachable'
                   status: DISABLED
                   priority: AVERAGE
@@ -240,7 +247,7 @@ zabbix_export:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                     - name: 'WireGuard: probe broken on {HOST.NAME}'
-                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,#2)=0'
+                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
                   tags:
                     - tag: scope
                       value: liveness
@@ -274,7 +281,7 @@ zabbix_export:
                   value: '{#VPN_TECH}'
               trigger_prototypes:
                 - uuid: 924a12ae1293476691aa656997526cc0
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],#2)>0'
+                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
@@ -286,7 +293,7 @@ zabbix_export:
                     - tag: scope
                       value: mtu
                 - uuid: 3d5cb4811b8b42a3a4b4352bdbe9b082
-                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],#3)=-1'
+                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable'
                   status: DISABLED
                   priority: AVERAGE
@@ -295,6 +302,8 @@ zabbix_export:
                   dependencies:
                     - name: 'WireGuard: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
+                    - name: 'WireGuard: probe broken on {HOST.NAME}'
+                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
                   tags:
                     - tag: scope
                       value: liveness
@@ -310,9 +319,12 @@ zabbix_export:
         - macro: '{$VPN.WATCHDOG.WINDOW}'
           value: 30m
           description: 'No-data window for the monitoring-blind watchdog: if wg.count yields nothing for this long, the agent/scripts/active-checks are assumed broken (and per-tunnel/posture alerts are suppressed via dependency to avoid chasing a blind probe). Referenced by the watchdog trigger and every dependency on it. Override per host (e.g. a proxied host with a longer active-check interval).'
+        - macro: '{$VPN.HYST.WINDOW}'
+          value: 25m
+          description: 'Hysteresis window: a trigger only fires if EVERY sample in this window agrees AND at least two samples are present (each guarded expression carries an explicit `count(...)>1` floor). The count floor is load-bearing, not belt-and-braces: a time window holds a time span, NOT a sample count, so after a collection gap longer than the window the window holds exactly one fresh sample and min()/max() would fire on that single reading — the very "one bad read pages" failure this macro exists to prevent. The watchdog does not cover it either: it keys on wg.count, so a stall in one guarded item while wg.count keeps flowing never trips it. Known residual limit (verified on the live server): count() counts VALUES, not polls, so on a duplicate-sample host one poll already satisfies >1 — a collection gap longer than the window followed by a single duplicate-writing poll can still page off that one poll. That is no worse than the pre-1.2.0 count-based form behaved on the same hosts, and it needs both conditions at once; closing it would require counting distinct timestamps, which Zabbix trigger functions cannot express. Deliberately time-based, not count-based (#N): a host whose agent writes the same value twice per poll — proxy-group / dual-ServerActive setups do — makes #2 span a single poll, silently disabling the hysteresis. A window cannot be defeated that way. Keep it >2x the longest poll interval among the items it guards ({$VPN.PROBE.INTERVAL} and the fixed 10m posture cadence); the 25m default covers both. Side effect: the probe-capability canary (wg.probe.ok, 5m) needs the full window too, so a lost cap_net_raw is confirmed in ~25m rather than ~10m — still well inside {$VPN.WATCHDOG.WINDOW}.'
         - macro: '{$VPN.PROBE.INTERVAL}'
           value: 10m
-          description: 'Poll interval for the active per-tunnel PMTU probe items (wg.pmtu/vpn.pmtu). Each probe does two key-free `wg show` reads via NOPASSWD sudo; an MTU black hole is a config-stable event, so 10m is ample and roughly halves the agent''s sudo rate vs the old 5m (host security tooling alerts on service-account sudo volume). Lower only if you need faster black-hole detection.'
+          description: 'Poll interval for the active per-tunnel PMTU probe items (wg.pmtu/vpn.pmtu). Each probe does two key-free `wg show` reads via NOPASSWD sudo; an MTU black hole is a config-stable event, so 10m is ample and roughly halves the agent''s sudo rate vs the old 5m (host security tooling alerts on service-account sudo volume). Lower only if you need faster black-hole detection. RAISING this per host requires raising {$VPN.HYST.WINDOW} on the same host to >=2x the new value (>12m30s at the 25m default leaves one sample in the window and silently disables the hysteresis — the very defect {$VPN.HYST.WINDOW} exists to prevent). No static check can catch that: the test only sees template defaults, never per-host overrides.'
         - macro: '{$VPN.PROBE.TARGETS}'
           description: 'Per-iface probe-target overrides for non-WireGuard tunnels (OpenVPN/ZeroTier). Comma-separated iface=ip list, e.g. "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Read by the per-tech discovery LLD keys; ifaces are unique across techs.'
         - macro: '{$WG.PROBE.TARGETS}'

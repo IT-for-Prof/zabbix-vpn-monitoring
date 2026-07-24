@@ -62,6 +62,14 @@ The agent runs **as root** (no sudo needed) and `install.sh` does **not** suppor
   Override per host/context where a tunnel must be lower. Sub-ceiling cross-host asymmetry (e.g. 1400
   where 1340 is needed) is out of scope — it needs a cross-host (pubkey-join) comparison, not shipped here.
 
+- `{$VPN.HYST.WINDOW}` — hysteresis window (default **25m**). A trigger fires only if *every* sample in
+  this window agrees, so one bad read never pages. Deliberately time-based, not count-based (`#N`): a host
+  whose agent writes the same value twice per poll — proxy-group / dual-`ServerActive` setups do — makes
+  `#2` span a single poll and silently disables the hysteresis. **If you raise `{$VPN.PROBE.INTERVAL}` on a
+  host, raise this on the same host to >=2x the new value**, or the window holds one sample again and the
+  hysteresis is gone. Nothing checks that for you — `tests/test-template-triggers.sh` validates template
+  defaults, never per-host overrides.
+
 ## What auto-discovers, what does not
 
 - **A new tunnel on an already-onboarded host** → **automatic** (the `vpn.posture.discovery` LLD finds it).

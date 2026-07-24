@@ -31,6 +31,15 @@ Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handsh
   each tunnel's `mtu` / `fwd` / `clamp`; the template pages **Warning** on `mtu > {$VPN.MTU.MAX}` (default
   1420) and notes **Information** on forward-without-clamp (suppressed under the Warning). It's
   connection-state-independent — a lost handshake or link flap never makes it flap.
+- **Hysteresis (why a page is never instant):** every paging trigger requires *every* sample inside
+  `{$VPN.HYST.WINDOW}` (default 25m) to agree **and** at least two samples to be present
+  (`count(...)>1`). Both halves are load-bearing. A count-based `#2` looks like "two polls" but
+  collapses to one on hosts whose agent writes the same value twice per poll — proxy-group /
+  dual-`ServerActive` setups do, on 9 of 21 tunnels in the estate that motivated this — so the window
+  is time-based. A time window alone is equally unsafe in the opposite direction: after a collection
+  gap longer than the window it holds exactly one fresh sample, and a lone bad read pages. The count
+  floor closes that. Raising `{$VPN.PROBE.INTERVAL}` on a host means raising `{$VPN.HYST.WINDOW}`
+  there too (≥2x) — nothing enforces it automatically.
 
 ## Why the active probe is the right detector
 
