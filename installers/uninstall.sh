@@ -16,6 +16,7 @@ rm -f /etc/sudoers.d/zabbix-wg /etc/sudoers.d/zabbix-zerotier /etc/sudoers.d/zab
       /etc/sudoers.d/zabbix-posture
 # An install interrupted between staging and commit_sudoers leaves a *.tmp behind. sudo ignores
 # include-dir filenames containing a dot, so it was never live — but it is still grant text.
-rm -f /etc/sudoers.d/zabbix-*.tmp
+rm -f /etc/sudoers.d/zabbix-wg.tmp /etc/sudoers.d/zabbix-posture.tmp \
+      /etc/sudoers.d/zabbix-zerotier.tmp /etc/sudoers.d/zabbix-openvpn-as.tmp
 systemctl reload zabbix-agent2 2>/dev/null || systemctl restart zabbix-agent2
 echo "UNINSTALL OK (cap_net_raw on ping and /etc/hosts left as-is)"

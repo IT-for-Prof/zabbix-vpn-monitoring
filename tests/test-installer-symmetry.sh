@@ -23,6 +23,8 @@ is_left_behind() {
   case $1 in
     /etc/zabbix/scripts) return 0 ;;          # the script dir itself; other packages may use it
     /etc/zabbix/scripts/.backup-*) return 0 ;; # timestamped rollback history (uninstall.sh documents this)
+    /etc/hosts) return 0 ;;                   # install.sh only APPENDS a self-hostname line;
+                                              # uninstall.sh says so ("/etc/hosts left as-is")
   esac
   return 1
 }
@@ -32,6 +34,13 @@ is_left_behind() {
 # so a full-line `# install -m ... "$SCR/x"` was left intact for one of them and counted as a
 # live install target. One definition, used by both.
 strip_comments() { sed 's/[[:space:]]*#.*$//'; }
+
+# The one definition of "what an install/commit call site looks like". Used BOTH to extract
+# targets and to compute the coverage floor — two copies would drift apart and shrink together,
+# which is precisely the silent-pass mode the floor exists to prevent. `install -m/-d` takes the
+# last field (survives extra flags like `-o root`); `commit_sudoers <path> <label>` takes $2.
+AWK_SITES='/(^|[[:space:]])install[[:space:]]+-[dm]/ { gsub(/"/,""); print $NF; next }
+           $1 == "commit_sudoers"                    { gsub(/"/,""); print $2 }'
 
 # sed script resolving $VAR / ${VAR} for every literal absolute path assigned in the given text.
 # Quotes around the value are stripped, so `SCR=/x` and `SCR="/x"` resolve identically — quoting
@@ -69,17 +78,15 @@ install_targets() {
   subs=$(build_subs "$(printf '%s\n' "$flat" | sed -f <(printf '%s\n' "$subs"))")
 
   raw=$(
-    printf '%s\n' "$code" | {
-      # `install -m 0644 [flags] <src> <dst>` and `install -d <dir>` -> last field. Taking the
-      # last field rather than a fixed-arity regex survives extra flags such as `-o root`.
-      awk '/(^|[[:space:]])install[[:space:]]+-[dm]/ { gsub(/"/,""); print $NF }'
-    }
-    # `> "<path>"` redirect targets.
+    # Install/commit call sites, read from $flat (the `;`-split text) — NOT $code. Two call
+    # sites packed onto one line with `;` would otherwise contribute one target while the
+    # coverage floor counted one line, so both sides shrank together and the guard passed.
+    printf '%s\n' "$flat" | awk "$AWK_SITES"
+    # Redirect targets, quoted (`> "<path>"`) and bare (`>> /etc/hosts`).
     printf '%s\n' "$code" | sed -n 's|.*>[[:space:]]*"\([^"]*\)".*|\1|p'
+    printf '%s\n' "$code" | sed -n 's|.*>[[:space:]]*\(/etc/[^ "'"'"';&|)]*\).*|\1|p'
     # Absolute-path variable assignments (sudoers files, drop-ins).
     printf '%s\n' "$flat" | sed -n 's|^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=["'"'"']\{0,1\}\(/etc/[^ "'"'"']*\).*|\1|p'
-    # `commit_sudoers <path> <label>` call sites — catches a grant passed as a literal path.
-    printf '%s\n' "$code" | awk '/^[[:space:]]*commit_sudoers[[:space:]]/ { gsub(/"/,""); print $2 }'
   )
   # Resolve, then drop the two transient classes before the unresolved check: `*.tmp` staging
   # files (created and consumed on the same code path, never a live install target) and the
@@ -100,11 +107,8 @@ install_targets() {
   # Coverage floor: every `install -d/-m` and `commit_sudoers` call site must have been seen by
   # the extractor. A regex that quietly stops matching shrinks TOTAL instead of failing, which
   # is the exact silent-pass mode this guard exists to prevent — so assert the count directly.
-  want=$(printf '%s\n' "$code" | grep -cE '(^|[[:space:]])(install[[:space:]]+-[dm]|commit_sudoers[[:space:]])')
-  got=$(printf '%s\n' "$code" |
-    awk '/(^|[[:space:]])install[[:space:]]+-[dm]/ { gsub(/"/,""); print $NF }
-         /^[[:space:]]*commit_sudoers[[:space:]]/  { gsub(/"/,""); print $2 }' |
-    sed -f <(printf '%s\n' "$subs") | grep -c '^/')
+  want=$(printf '%s\n' "$flat" | grep -cE '(^|[[:space:]])(install[[:space:]]+-[dm]|commit_sudoers[[:space:]])')
+  got=$(printf '%s\n' "$flat" | awk "$AWK_SITES" | sed -f <(printf '%s\n' "$subs") | grep -c '^/')
   [ "$want" = "$got" ] || {
     echo >&2 "FAIL: $want install/commit_sudoers call sites but only $got resolved to a path —"
     echo >&2 "      the extractor is silently missing targets; fix it before trusting this guard."
@@ -176,12 +180,12 @@ selftest() {
   cp "$DIR/install.sh" "$t/install.sh"; cp "$DIR/uninstall.sh" "$t/uninstall.sh"
   sed -i 's|^SCR=\(/[^;]*\); *CONF=\(/.*\)|SCR="\1"; CONF="\2"|' "$t/install.sh"
   if ! grep -q '^SCR="' "$t/install.sh"; then
-    echo "SELFTEST FAIL: не удалось закавычить SCR/CONF — самотест устарел, а не код"; rc=1
+    echo "SELFTEST FAIL: could not quote SCR/CONF — the selftest is stale, not the code"; rc=1
   else
     local full quoted
     full=$(install_targets "$DIR/install.sh" | wc -l)
     quoted=$(install_targets "$t/install.sh" | wc -l)
-    [ "$full" = "$quoted" ] || { echo "SELFTEST FAIL: кавычки в SCR/CONF изменили охват $full -> $quoted"; rc=1; }
+    [ "$full" = "$quoted" ] || { echo "SELFTEST FAIL: quoting SCR/CONF changed coverage $full -> $quoted"; rc=1; }
   fi
 
   return $rc

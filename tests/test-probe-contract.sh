@@ -2,7 +2,15 @@
 # Asserts lib/wg_pmtu.sh contract: offline(no/stale handshake)=-2, healthy=0, black-hole>0.
 # Needs root (netns) + the wireguard module. Self-cleans. Do NOT run on a node whose real
 # WireGuard listens on 51899 (port clash) — this is a lab/CI check.
+# requires: root
+# Self-gate on every precondition, so a missing one degrades to SKIP rather than an assertion
+# failure that reads like a real defect. `a0` below is created in the HOST namespace, so running
+# this is a deliberate act, not something to infer from uid 0 — hence the explicit opt-in.
 set -uo pipefail
+[ "$(id -u)" = 0 ] || { echo "SKIP: needs root (network namespaces)"; exit 0; }
+command -v wg >/dev/null 2>&1 || { echo "SKIP: wireguard-tools (wg) not installed"; exit 0; }
+modinfo wireguard >/dev/null 2>&1 || { echo "SKIP: wireguard kernel module not available"; exit 0; }
+[ "${ZVM_ALLOW_NETNS:-}" = 1 ] || { echo "SKIP: mutates host networking — set ZVM_ALLOW_NETNS=1 to run"; exit 0; }
 P="${1:-$(cd "$(dirname "$0")/.." && pwd)/lib/wg_pmtu.sh}"
 fail(){ echo "FAIL: $*"; exit 1; }
 cleanup(){ ip netns del rtr 2>/dev/null; ip netns del right 2>/dev/null; ip link del wgA 2>/dev/null; ip link del a0 2>/dev/null; }

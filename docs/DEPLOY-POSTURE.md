@@ -28,7 +28,9 @@ A WireGuard host needs onboarding if it isn't linked to the template yet. List c
      I=$(command -v iptables-save) && printf "zabbix ALL=(root) NOPASSWD: %s \"\"\n" "$I" >> $P.tmp
      N=$(command -v nft)           && printf "zabbix ALL=(root) NOPASSWD: %s list ruleset\n" "$N" >> $P.tmp
      chmod 0440 $P.tmp
-     visudo -cf $P.tmp && mv $P.tmp $P && systemctl reload zabbix-agent2 || rm -f $P.tmp'
+     visudo -cf $P.tmp || { rm -f $P.tmp; echo "FATAL: invalid sudoers, nothing installed"; exit 1; }
+     mv $P.tmp $P
+     systemctl reload zabbix-agent2 || echo "WARN: sudoers installed but agent reload failed — reload it manually"'
    ```
    Two details worth keeping if you adapt this: stage to `$P.tmp` and only `mv` it into place
    **after** `visudo -cf` passes — writing `/etc/sudoers.d/` directly means a typo locks the host

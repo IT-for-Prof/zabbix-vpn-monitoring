@@ -2,7 +2,13 @@
 # Ground-truth integration test for vpn_posture.sh against a real WireGuard iface in a netns.
 # Builds the unsafe state (MTU>ceiling, no clamp, forwarding), asserts the collector flags it,
 # then fixes each fact and asserts it clears. Needs root. Self-cleaning. No production impact.
+# requires: root
+# Self-gate on every precondition so a missing one degrades to SKIP, not an assertion failure.
 set -u
+[ "$(id -u)" = 0 ] || { echo "SKIP: needs root (network namespaces)"; exit 0; }
+command -v wg >/dev/null 2>&1 || { echo "SKIP: wireguard-tools (wg) not installed"; exit 0; }
+modinfo wireguard >/dev/null 2>&1 || { echo "SKIP: wireguard kernel module not available"; exit 0; }
+[ "${ZVM_ALLOW_NETNS:-}" = 1 ] || { echo "SKIP: creates network namespaces — set ZVM_ALLOW_NETNS=1 to run"; exit 0; }
 NS=posturetest
 COL=$(cd "$(dirname "$0")/.." && pwd)/collectors/posture/vpn_posture.sh
 cleanup(){ ip netns del $NS 2>/dev/null; }

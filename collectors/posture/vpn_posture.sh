@@ -86,9 +86,15 @@ get_ipforward() {
 }
 
 get_carrier_text() {  # <iface>: wg/awg allowed-ips (a prefix broader than /32 => carries transit, not just its own peer)
+  # `show all` + filter here, NOT `show <iface>`. The sudoers grant is literal
+  # (`wg show all allowed-ips`) because the per-interface form needs a `*` wildcard, and sudo's
+  # `*` spans whitespace — that rule also permitted `wg show all dump allowed-ips`, which leaks
+  # the interface private key. Asking for `all` keeps the grant wildcard-free. `show all`
+  # prepends <iface> and <pubkey> columns; strip both so the parser sees the same token stream
+  # the per-interface form produced.
   for b in wg awg; do                                 # don't guess the binary by name; try wg then awg
     command -v "$b" >/dev/null 2>&1 || continue
-    out=$(priv "$b" show "$1" allowed-ips)
+    out=$(priv "$b" show all allowed-ips | awk -v i="$1" '$1==i { $1=""; $2=""; print }')
     [ -n "$out" ] && { printf '%s\n' "$out"; return; }
   done
 }

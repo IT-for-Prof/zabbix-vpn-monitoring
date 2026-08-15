@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Runs every tests/test-*.sh and reports PASS / SKIP / FAIL separately.
 #
-# SKIP is reported as its own category ON PURPOSE. Two tests here need root + network
-# namespaces, and test-gate-amneziawg.sh exits 0 with "SKIP: awg(8) not installed" when the
-# tool is absent. A runner that only looks at exit codes would count all three as passes, and
-# coverage would erode silently — exactly the failure mode these tests exist to catch. So a
-# skip is never a pass: it is printed, counted, and listed again in the summary.
+# SKIP is its own category ON PURPOSE. Several rigs need root, wireguard-tools, or the kernel
+# module, and they self-report `SKIP: <reason>` with exit 0 when a precondition is missing. A
+# runner that only looked at exit codes would count those as passes and coverage would erode
+# silently — exactly the failure mode these tests exist to catch. So a skip is never a pass: it
+# is printed, counted, and listed again in the summary with its reason.
+#
+# Classification is by the test's OWN report, not by inspecting its source. An earlier version
+# grepped each file for the string `ip netns`, which meant a test that merely MENTIONED netns in
+# a comment was silently reclassified as root-only and skipped forever.
 #
 # Exit status: non-zero only on a real failure. Skips do not fail the run (they are
-# environmental), but `--strict` turns any skip into a failure for a full-fidelity CI job.
+# environmental), but `--strict` turns any skip into a failure for a full-coverage CI job.
 set -u
 DIR=$(cd "$(dirname "$0")" && pwd)
 STRICT=${1:-}
@@ -16,12 +20,6 @@ pass=0; skip=0; fail=0; skipped=""; failed=""
 
 for t in "$DIR"/test-*.sh; do
   name=$(basename "$t" .sh)
-  # Root-gated by construction: netns rigs cannot run unprivileged. Classify up front rather
-  # than letting them fail with a permission error that reads like a real defect.
-  if grep -q 'ip netns' "$t" && [ "$(id -u)" != 0 ]; then
-    printf '  SKIP  %-32s требует root (network namespaces)\n' "$name"
-    skip=$((skip + 1)); skipped="$skipped $name(root)"; continue
-  fi
   out=$(bash "$t" 2>&1); rc=$?
   reason=$(printf '%s\n' "$out" | grep -m1 '^SKIP:' || true)
   if [ $rc -ne 0 ]; then
@@ -37,12 +35,12 @@ for t in "$DIR"/test-*.sh; do
   fi
 done
 
-echo "──────────────────────────────────────────────────────────"
-printf 'ИТОГО: %d прошло, %d пропущено, %d упало\n' "$pass" "$skip" "$fail"
-[ $skip -eq 0 ] || echo "ПРОПУЩЕНО (не считается успехом):$skipped"
-[ $fail -eq 0 ] || { echo "УПАЛО:$failed"; exit 1; }
+echo "----------------------------------------------------------"
+printf 'TOTAL: %d passed, %d skipped, %d failed\n' "$pass" "$skip" "$fail"
+[ $skip -eq 0 ] || echo "SKIPPED (not a pass):$skipped"
+[ $fail -eq 0 ] || { echo "FAILED:$failed"; exit 1; }
 if [ "$STRICT" = --strict ] && [ $skip -gt 0 ]; then
-  echo "--strict: пропуски считаются провалом (нужен root и полный набор инструментов)"
+  echo "--strict: skips count as failure (needs root, wireguard-tools, and ZVM_ALLOW_NETNS=1)"
   exit 1
 fi
 exit 0
