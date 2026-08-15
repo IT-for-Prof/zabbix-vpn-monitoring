@@ -27,6 +27,12 @@ is_left_behind() {
   return 1
 }
 
+# Strip shell comments before parsing real tokens. Both extractors below need this, and they
+# used to carry their own copy — which had already drifted (`[[:space:]]#` vs `[[:space:]]*#`),
+# so a full-line `# install -m ... "$SCR/x"` was left intact for one of them and counted as a
+# live install target. One definition, used by both.
+strip_comments() { sed 's/[[:space:]]*#.*$//'; }
+
 # sed script resolving $VAR / ${VAR} for every literal absolute path assigned in the given text.
 # Quotes around the value are stripped, so `SCR=/x` and `SCR="/x"` resolve identically — quoting
 # that assignment previously cut this guard from 20 targets to 8 while still printing PASS.
@@ -43,10 +49,10 @@ build_subs() {
 # unresolved variable reference, rather than dropping it from the checked set.
 install_targets() {
   local ins=$1 code flat subs raw resolved unresolved want got
-  # Strip trailing comments FIRST. Several install lines carry an explanatory comment, and a
+  # Strip comments FIRST. Several install lines carry a trailing explanatory comment, and a
   # last-field extractor would otherwise take the comment's last word as the destination and
   # then drop it for not starting with `/` — silently losing three real targets.
-  code=$(sed 's/[[:space:]]#.*$//' "$ins")
+  code=$(strip_comments < "$ins")
   # `;`-separated assignments (install.sh line 6 packs SCR and CONF onto one line) become
   # their own lines so a single assignment scan sees all of them.
   flat=$(printf '%s\n' "$code" | tr ';' '\n')
@@ -111,7 +117,7 @@ install_targets() {
 # --- every path uninstall.sh actually removes --------------------------------------------
 # Comments are stripped and line continuations joined, so only real `rm -f` arguments count.
 removed_paths() {
-  sed 's/[[:space:]]*#.*$//' "$1" |
+  strip_comments < "$1" |
     sed -e :a -e '/\\$/N; s/\\\n//; ta' |
     awk '/(^|[[:space:]])rm[[:space:]]+-f/ { for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }'
 }
@@ -163,13 +169,20 @@ selftest() {
   check_symmetry "$t/install.sh" "$t/uninstall.sh" quiet \
     && { echo "SELFTEST FAIL: a comment satisfied the removal check"; rc=1; }
 
-  # (c) quoting the SCR/CONF assignment must not silently shrink coverage
+  # (c) quoting the SCR/CONF assignment must not silently shrink coverage.
+  # Matched by CONTENT, not by line number: an addressed `sed '6s|...|'` is a silent no-op once
+  # the assignment moves, so the counts would agree because nothing was mutated and this case
+  # would "pass" without ever exercising the regression. Assert the mutation actually landed.
   cp "$DIR/install.sh" "$t/install.sh"; cp "$DIR/uninstall.sh" "$t/uninstall.sh"
-  sed -i '6s|^SCR=\(/[^;]*\); *CONF=\(/.*\)|SCR="\1"; CONF="\2"|' "$t/install.sh"
-  local full quoted
-  full=$(install_targets "$DIR/install.sh" | wc -l)
-  quoted=$(install_targets "$t/install.sh" | wc -l)
-  [ "$full" = "$quoted" ] || { echo "SELFTEST FAIL: quoting SCR/CONF changed coverage $full -> $quoted"; rc=1; }
+  sed -i 's|^SCR=\(/[^;]*\); *CONF=\(/.*\)|SCR="\1"; CONF="\2"|' "$t/install.sh"
+  if ! grep -q '^SCR="' "$t/install.sh"; then
+    echo "SELFTEST FAIL: не удалось закавычить SCR/CONF — самотест устарел, а не код"; rc=1
+  else
+    local full quoted
+    full=$(install_targets "$DIR/install.sh" | wc -l)
+    quoted=$(install_targets "$t/install.sh" | wc -l)
+    [ "$full" = "$quoted" ] || { echo "SELFTEST FAIL: кавычки в SCR/CONF изменили охват $full -> $quoted"; rc=1; }
+  fi
 
   return $rc
 }

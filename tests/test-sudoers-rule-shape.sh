@@ -47,6 +47,17 @@ echo "selftest: классификатор отвергает голую ком�
 rc=0; n=0
 for f in $SOURCES; do
   [ -f "$f" ] || { echo "FAIL: нет файла $f"; exit 1; }
+  # Coverage floor, mirroring test-installer-symmetry.sh: every `NOPASSWD: %s` occurrence must
+  # yield a parsed rule. Without this a grant written in a shape rule_args() does not match
+  # (a two-line printf, string concatenation) is simply never classified, and the file still
+  # reports PASS on a smaller set — the same silent coverage loss these guards exist to stop.
+  want=$(grep -c 'NOPASSWD: %s' "$f")
+  got=$(rule_args "$f" | grep -c .)
+  [ "$want" = "$got" ] || {
+    echo "FAIL: в $f найдено $want вхождений 'NOPASSWD: %s', но разобрано $got —"
+    echo "      экстрактор не видит часть грантов; чините его, а не доверяйте результату"
+    exit 1
+  }
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     n=$((n + 1))
