@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck python3-yaml
+
+      # tools/ is a hand-run diagnostic rig with known SC1010 false positives on `ping -M do`;
+      # the production surface below is clean at warning level and must stay that way.
+      - name: shellcheck (production surface)
+        run: shellcheck -S warning lib/*.sh collectors/*/*.sh installers/*.sh tests/*.sh
+
+      - name: Syntax check every shell file
+        run: for f in $(git ls-files '*.sh'); do bash -n "$f"; done
+
+      # Three tests need root + network namespaces and report themselves as SKIP unprivileged.
+      # sudo -E keeps them honest here: on a GitHub runner they can actually run, so CI covers
+      # the netns rigs that a developer laptop usually skips. A skip is never counted as a pass
+      # (see tests/run-all.sh) — if the privileged run degrades, the summary says so.
+      - name: Run test suite
+        run: sudo -E bash tests/run-all.sh

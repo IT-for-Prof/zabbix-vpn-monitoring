@@ -68,17 +68,23 @@ commit_sudoers() {  # <final-path> <label-for-the-error-message>
 #    (CAP_NET_ADMIN). Grant the agent a least-privilege sudoers rule scoped to exactly those:
 #    `wg show ... dump`/`private-key` are NOT granted, so the agent can never read tunnel keys
 #    (`wg show <iface> dump` would print the interface private key in its first field).
+#    FULLY LITERAL, no wildcard: an earlier `show * allowed-ips` form looked tighter than it
+#    was, because sudo's `*` spans whitespace — it also matched
+#    `wg show all dump allowed-ips`, smuggling the key-exposing subcommand in ahead of the
+#    permitted one (verified with `sudo -l` on a live host: PERMITTED). Nothing but wg's own
+#    "no 4th argument" check stopped it. gate_wireguard.sh therefore asks for `all` and filters
+#    by interface itself, which lets this grant name both words outright.
 # Only where wg/awg exists (an OpenVPN- or ZeroTier-only host has neither — that's fine).
 if command -v wg >/dev/null 2>&1 || command -v awg >/dev/null 2>&1; then
   SUDOERS=/etc/sudoers.d/zabbix-wg
   : > "${SUDOERS}.tmp"
   for B in wg awg; do
     P=$(command -v "$B") || continue
-    printf 'zabbix ALL=(root) NOPASSWD: %s show * allowed-ips\n' "$P"
-    printf 'zabbix ALL=(root) NOPASSWD: %s show * latest-handshakes\n' "$P"
+    printf 'zabbix ALL=(root) NOPASSWD: %s show all allowed-ips\n' "$P"
+    printf 'zabbix ALL=(root) NOPASSWD: %s show all latest-handshakes\n' "$P"
   done >> "${SUDOERS}.tmp"
   commit_sudoers "$SUDOERS" wg
-  echo "sudoers: $SUDOERS installed for '{wg,awg} show * {allowed-ips,latest-handshakes}' (key-free; dump/private-key denied)"
+  echo "sudoers: $SUDOERS installed for '{wg,awg} show all {allowed-ips,latest-handshakes}' (literal, no wildcard; dump/private-key denied)"
 else
   echo "note: no wg/awg here — WireGuard collector idle (discovery self-gates empty)"
 fi
