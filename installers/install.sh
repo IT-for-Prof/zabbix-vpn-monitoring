@@ -57,6 +57,13 @@ else
 fi
 # 3) self-hostname must resolve (avoids sudo/lookup stalls; harmless for P1, needed for P2)
 hn=$(hostname); getent hosts "$hn" >/dev/null || { echo "127.0.1.1 $hn" >> /etc/hosts; echo "added $hn to /etc/hosts"; }
+# Install a staged sudoers file: validate "$1.tmp" with visudo BEFORE it becomes live, so a
+# malformed rule can never land in /etc/sudoers.d and lock the host out of sudo entirely.
+commit_sudoers() {  # <final-path> <label-for-the-error-message>
+  chmod 0440 "${1}.tmp"
+  visudo -cf "${1}.tmp" >/dev/null || { echo "FATAL: invalid $2 sudoers"; rm -f "${1}.tmp"; exit 1; }
+  mv "${1}.tmp" "$1"
+}
 # 4) handshake gate (Phase 2) reads handshake age via two KEY-FREE `wg show` subcommands
 #    (CAP_NET_ADMIN). Grant the agent a least-privilege sudoers rule scoped to exactly those:
 #    `wg show ... dump`/`private-key` are NOT granted, so the agent can never read tunnel keys
@@ -70,9 +77,7 @@ if command -v wg >/dev/null 2>&1 || command -v awg >/dev/null 2>&1; then
     printf 'zabbix ALL=(root) NOPASSWD: %s show * allowed-ips\n' "$P"
     printf 'zabbix ALL=(root) NOPASSWD: %s show * latest-handshakes\n' "$P"
   done >> "${SUDOERS}.tmp"
-  chmod 0440 "${SUDOERS}.tmp"
-  visudo -cf "${SUDOERS}.tmp" >/dev/null || { echo "FATAL: invalid sudoers"; rm -f "${SUDOERS}.tmp"; exit 1; }
-  mv "${SUDOERS}.tmp" "$SUDOERS"
+  commit_sudoers "$SUDOERS" wg
   echo "sudoers: $SUDOERS installed for '{wg,awg} show * {allowed-ips,latest-handshakes}' (key-free; dump/private-key denied)"
 else
   echo "note: no wg/awg here — WireGuard collector idle (discovery self-gates empty)"
@@ -83,12 +88,15 @@ fi
 #      the agent `pfctl -sr` — see docs/superpowers/specs/2026-06-05-vpn-mtu-posture-monitoring-design.md.)
 PSUDO=/etc/sudoers.d/zabbix-posture
 : > "${PSUDO}.tmp"
-IPTS=$(command -v iptables-save 2>/dev/null) && printf 'zabbix ALL=(root) NOPASSWD: %s\n' "$IPTS" >> "${PSUDO}.tmp"
+# The trailing '""' pins the grant to ZERO arguments. Without it sudoers permits ANY argument,
+# and iptables-save takes `-M <path>` (execs that path as root when it loads a module) and
+# `-f <path>` (writes as root) — i.e. a full root escalation from the zabbix account, not the
+# read-only grant this block advertises. vpn_posture.sh calls it bare (`priv iptables-save`),
+# so pinning changes nothing at runtime. nft below is already argument-pinned.
+IPTS=$(command -v iptables-save 2>/dev/null) && printf 'zabbix ALL=(root) NOPASSWD: %s ""\n' "$IPTS" >> "${PSUDO}.tmp"
 NFT=$(command -v nft 2>/dev/null) && printf 'zabbix ALL=(root) NOPASSWD: %s list ruleset\n' "$NFT" >> "${PSUDO}.tmp"
 if [ -s "${PSUDO}.tmp" ]; then
-  chmod 0440 "${PSUDO}.tmp"
-  visudo -cf "${PSUDO}.tmp" >/dev/null || { echo "FATAL: invalid posture sudoers"; rm -f "${PSUDO}.tmp"; exit 1; }
-  mv "${PSUDO}.tmp" "$PSUDO"
+  commit_sudoers "$PSUDO" posture
   echo "sudoers: $PSUDO installed for read-only 'iptables-save' / 'nft list ruleset' (clamp posture)"
   # Smoke-check the grant actually works for the agent user (matches the wg/zerotier/openvpn blocks).
   if { [ -n "${IPTS:-}" ] && sudo -u zabbix sudo -n "$IPTS" >/dev/null 2>&1; } \
@@ -106,9 +114,7 @@ fi
 if ZT=$(command -v zerotier-cli 2>/dev/null); then
   ZTSUDO=/etc/sudoers.d/zabbix-zerotier
   printf 'zabbix ALL=(root) NOPASSWD: %s -j listnetworks\n' "$ZT" > "${ZTSUDO}.tmp"
-  chmod 0440 "${ZTSUDO}.tmp"
-  visudo -cf "${ZTSUDO}.tmp" >/dev/null || { echo "FATAL: invalid zerotier sudoers"; rm -f "${ZTSUDO}.tmp"; exit 1; }
-  mv "${ZTSUDO}.tmp" "$ZTSUDO"
+  commit_sudoers "$ZTSUDO" zerotier
   if sudo -u zabbix sudo -n "$ZT" -j listnetworks >/dev/null 2>&1; then
     echo "sudoers: $ZTSUDO installed; zabbix can read 'zerotier-cli -j listnetworks' — OK (authtoken never read directly)"
   else
@@ -120,9 +126,7 @@ SA=/usr/local/openvpn_as/scripts/sacli; [ -x "$SA" ] || SA=$(command -v sacli 2>
 if [ -n "$SA" ]; then
   AVSUDO=/etc/sudoers.d/zabbix-openvpn-as
   printf 'zabbix ALL=(root) NOPASSWD: %s VPNStatus\n' "$SA" > "${AVSUDO}.tmp"
-  chmod 0440 "${AVSUDO}.tmp"
-  visudo -cf "${AVSUDO}.tmp" >/dev/null || { echo "FATAL: invalid openvpn-as sudoers"; rm -f "${AVSUDO}.tmp"; exit 1; }
-  mv "${AVSUDO}.tmp" "$AVSUDO"
+  commit_sudoers "$AVSUDO" openvpn-as
   if sudo -u zabbix sudo -n "$SA" VPNStatus >/dev/null 2>&1; then
     echo "sudoers: $AVSUDO installed; zabbix can read 'sacli VPNStatus' — OK (key/cert never read)"
   else

@@ -24,11 +24,20 @@ A WireGuard host needs onboarding if it isn't linked to the template yet. List c
    scp collectors/posture/vpn_posture.sh <host>:/etc/zabbix/scripts/vpn_posture.sh
    scp collectors/posture/posture.conf  <host>:/etc/zabbix/zabbix_agent2.d/posture.conf
    ssh <host> 'chmod 0755 /etc/zabbix/scripts/vpn_posture.sh
-     P=/etc/sudoers.d/zabbix-posture; : > $P
-     I=$(command -v iptables-save) && printf "zabbix ALL=(root) NOPASSWD: %s\n" "$I" >> $P
-     N=$(command -v nft)           && printf "zabbix ALL=(root) NOPASSWD: %s list ruleset\n" "$N" >> $P
-     chmod 0440 $P; visudo -cf $P && systemctl reload zabbix-agent2'
+     P=/etc/sudoers.d/zabbix-posture; : > $P.tmp
+     I=$(command -v iptables-save) && printf "zabbix ALL=(root) NOPASSWD: %s \"\"\n" "$I" >> $P.tmp
+     N=$(command -v nft)           && printf "zabbix ALL=(root) NOPASSWD: %s list ruleset\n" "$N" >> $P.tmp
+     chmod 0440 $P.tmp
+     visudo -cf $P.tmp && mv $P.tmp $P && systemctl reload zabbix-agent2 || rm -f $P.tmp'
    ```
+   Two details worth keeping if you adapt this: stage to `$P.tmp` and only `mv` it into place
+   **after** `visudo -cf` passes — writing `/etc/sudoers.d/` directly means a typo locks the host
+   out of sudo. And the trailing `""` pins the grant to zero arguments; without it sudoers allows
+   any, and `iptables-save -M <path>` execs that path as root (`-f <path>` writes as root), which
+   turns a "read-only" grant into a root escalation from the `zabbix` account.
+
+   To revoke: `rm -f /etc/sudoers.d/zabbix-posture /etc/zabbix/scripts/vpn_posture.sh
+   /etc/zabbix/zabbix_agent2.d/posture.conf`, or just run `installers/uninstall.sh`.
 2. **Verify on the host** (data comes through the real agent):
    ```sh
    ssh <host> 'zabbix_agent2 -t vpn.posture.discovery; zabbix_agent2 -t "vpn.posture.mtu[<iface>]"'
