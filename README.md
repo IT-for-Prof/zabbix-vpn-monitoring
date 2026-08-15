@@ -66,10 +66,40 @@ lib/           shared ICMP-DF probe (vpn_pmtu.sh) + per-tech gate_<tech>.sh (wg_
 collectors/    per-technology discovery + agent2 conf (wireguard/ zerotier/ openvpn/ posture/)
 templates/     Zabbix template YAML ("VPN Tunnel MTU by Zabbix agent")
 installers/    node installer/uninstaller (cap_net_raw, ServerActive, Timeout>=30, narrow sudoers)
-tests/         fixture + netns contract tests (no prod impact)
+tests/         static-contract, fixture and netns tests + run-all.sh (no prod impact)
 tools/         read-only diagnostics + netns black-hole/asymmetry ground-truth rigs (see tools/README.md)
 docs/          responder runbook + posture deploy guide
 ```
+
+## Tests
+
+```sh
+bash tests/run-all.sh            # everything runnable here; PASS / SKIP / FAIL are separate
+sudo ZVM_ALLOW_NETNS=1 \
+     bash tests/run-all.sh       # also the netns rigs (they mutate host networking)
+bash tests/run-all.sh --strict   # any SKIP is a failure (opt-in; CI does not use it —
+                                 # awg(8) is not packaged, so that rig always skips)
+```
+
+Standalone assert-based shell scripts, no framework: each `tests/test-*.sh` is `bash`-runnable on
+its own and exits 0 on success. **A SKIP is never counted as a pass** — a rig that cannot run
+(no root, no `wg`, no kernel module) says so with a reason, so coverage cannot erode silently.
+The netns rigs need an explicit `ZVM_ALLOW_NETNS=1` because they create interfaces in the host
+network namespace; uid 0 alone is not taken as consent.
+
+Three of them are static contract tests that need nothing installed, and each carries a negative
+self-test asserting it can actually fail:
+
+| test | guards |
+|------|--------|
+| `test-installer-symmetry.sh` | every `/etc` path `install.sh` creates is removed by `uninstall.sh` |
+| `test-sudoers-rule-shape.sh` | every generated NOPASSWD grant bounds its arguments, and matches how the collectors invoke it |
+| `test-template-triggers.sh`   | template trigger dependencies resolve; hysteresis is time-based, not `#N` |
+
+CI (`.github/workflows/tests.yml`) runs shellcheck over the production surface, a syntax pass over
+every shell file, then the suite twice — privileged and unprivileged. The unprivileged run is the
+one that matches production, where the agent is the non-root `zabbix` user and every privileged
+read goes through `sudo -n`.
 
 ## License
 
