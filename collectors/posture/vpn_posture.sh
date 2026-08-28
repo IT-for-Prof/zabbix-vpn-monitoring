@@ -35,7 +35,16 @@ parse_has_routed_prefix() {  # stdin: allowed-ips or route lines
 parse_clamp_linux() {  # $1=iface ; stdin=ruleset text
   awk -v ifc="$1" '
     { low=tolower($0)
-      if (low ~ /clamp-mss-to-pmtu/) { f=1; next }
+      if (low ~ /clamp-mss-to-pmtu/) {
+        out_seen=out_match=0
+        for (i=1;i<NF;i++) if ($i=="-o" || $i=="--out-interface") {
+          out_seen=1; sel=$(i+1); sel_match=(sel==ifc)
+          if (sel ~ /\+$/) sel_match=(index(ifc, substr(sel, 1, length(sel)-1))==1)
+          if ((i>1 && $(i-1)=="!") ? !sel_match : sel_match) out_match=1
+        }
+        if (!out_seen || out_match) f=1
+        next
+      }
       # iface bounded by start/space/quote on the left and end/space/quote on the right
       # (^ and $ are real anchors here; inside [] a $ would be a literal dollar).
       if (low ~ /tcpmss|maxseg/ && $0 ~ ("(^|[ \"])" ifc "($|[ \"])")) f=1

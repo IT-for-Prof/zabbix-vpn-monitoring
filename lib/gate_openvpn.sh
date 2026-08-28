@@ -4,7 +4,7 @@
 # (epoch 0 / stale => -2 offline). KEY-FREE: status/socket/sacli-status only, never the key/cert.
 #
 # Liveness model per source:
-#   - status-version 3 file (TAB) and OpenVPN Access Server (`sacli VPNStatus` JSON): the ROUTING_TABLE
+#   - status-version 2/3 file (comma/TAB) and OpenVPN Access Server (`sacli VPNStatus` JSON): the ROUTING_TABLE
 #     is a *live* view (entries vanish on disconnect), so it's BINARY — target present => emit `now`
 #     (live, like ZeroTier); absent => `0` (=> -2). We do NOT age the row's "Last Ref", because that only
 #     advances on traffic and would falsely offline a connected-but-idle client when keepalive > FRESH.
@@ -60,9 +60,9 @@ if data.lstrip()[:1] == "{":                      # OpenVPN Access Server: sacli
                 if row[va] == tgt: print(int(time.time())); sys.exit(0)   # connected => live
             except (IndexError, TypeError): pass
     print(0); sys.exit(0)                          # not connected => -2
-if "ROUTING_TABLE" in data:                       # community status-version 3, TAB (BINARY)
+if "ROUTING_TABLE" in data:                       # community status-version 2/3, comma/TAB (BINARY)
     for ln in data.splitlines():
-        f = ln.split("\t")
+        f = ln.split("\t" if "\t" in ln else ",")
         if len(f) >= 2 and f[0] == "ROUTING_TABLE" and f[1] == tgt:
             print(int(time.time())); sys.exit(0)   # present in the live routing table => live
     print(0); sys.exit(0)                          # not connected => -2

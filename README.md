@@ -47,13 +47,25 @@ Against a *silent* black hole the active ICMP-DF probe is the only endpoint-runn
 catches it: passive `IP_MTU` / `ip route get` / counters are blind (no PTB to learn from), a socket TCP
 probe is blind (MSS auto-clamps to the peer), and eBPF only sees drops on the node doing the dropping.
 Fully ICMP-dark peers (no ICMP *and* no open TCP) are unmonitorable from one end — `-1` data-only is the
-correct verdict. The netns rigs in `tools/` reproduce these cases as ground truth.
+correct verdict.
 
 ## Install
 
 `installers/install.sh` is idempotent (backs up prior scripts, ensures agent `Timeout≥30`, installs only
 collectors whose tech is present, sets the narrow read-only sudoers). Then link the host to the template.
 FreeBSD/pfSense is a separate manual step — see [`docs/DEPLOY-POSTURE.md`](docs/DEPLOY-POSTURE.md).
+
+Linux prerequisites: Zabbix Agent 2 already installed (`zabbix_agent2`, systemd unit, and
+`/etc/zabbix/zabbix_agent2.d/`), Bash, `sudo`/`visudo`, `ip`, `ping`, and `getcap`/`setcap`.
+The VPN CLIs are optional globally but required for their own collectors (`wg` or `awg`,
+`zerotier-cli`, and OpenVPN status or `sacli`). Deploy from the repository root:
+
+```sh
+sudo bash installers/install.sh
+```
+
+The installer prints live Zabbix item smoke results and leaves a rollback backup under
+`/etc/zabbix/scripts/.backup-<timestamp>/` when it replaces an existing installation.
 
 Mitigations the probe **detects but does not enforce** (keep them in config management, not the template):
 `net.ipv4.tcp_mtu_probing=1` (PLPMTUD); **MSS clamping** on forwarding gateways
@@ -66,40 +78,8 @@ lib/           shared ICMP-DF probe (vpn_pmtu.sh) + per-tech gate_<tech>.sh (wg_
 collectors/    per-technology discovery + agent2 conf (wireguard/ zerotier/ openvpn/ posture/)
 templates/     Zabbix template YAML ("VPN Tunnel MTU by Zabbix agent")
 installers/    node installer/uninstaller (cap_net_raw, ServerActive, Timeout>=30, narrow sudoers)
-tests/         static-contract, fixture and netns tests + run-all.sh (no prod impact)
-tools/         read-only diagnostics + netns black-hole/asymmetry ground-truth rigs (see tools/README.md)
 docs/          responder runbook + posture deploy guide
 ```
-
-## Tests
-
-```sh
-bash tests/run-all.sh            # everything runnable here; PASS / SKIP / FAIL are separate
-sudo ZVM_ALLOW_NETNS=1 \
-     bash tests/run-all.sh       # also the netns rigs (they mutate host networking)
-bash tests/run-all.sh --strict   # any SKIP is a failure (opt-in; CI does not use it —
-                                 # awg(8) is not packaged, so that rig always skips)
-```
-
-Standalone assert-based shell scripts, no framework: each `tests/test-*.sh` is `bash`-runnable on
-its own and exits 0 on success. **A SKIP is never counted as a pass** — a rig that cannot run
-(no root, no `wg`, no kernel module) says so with a reason, so coverage cannot erode silently.
-The netns rigs need an explicit `ZVM_ALLOW_NETNS=1` because they create interfaces in the host
-network namespace; uid 0 alone is not taken as consent.
-
-Three of them are static contract tests that need nothing installed, and each carries a negative
-self-test asserting it can actually fail:
-
-| test | guards |
-|------|--------|
-| `test-installer-symmetry.sh` | every `/etc` path `install.sh` creates is removed by `uninstall.sh` |
-| `test-sudoers-rule-shape.sh` | every generated NOPASSWD grant bounds its arguments, and matches how the collectors invoke it |
-| `test-template-triggers.sh`   | template trigger dependencies resolve; hysteresis is time-based, not `#N` |
-
-CI (`.github/workflows/tests.yml`) runs shellcheck over the production surface, a syntax pass over
-every shell file, then the suite twice — privileged and unprivileged. The unprivileged run is the
-one that matches production, where the agent is the non-root `zabbix` user and every privileged
-read goes through `sudo -n`.
 
 ## License
 

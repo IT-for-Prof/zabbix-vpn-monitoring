@@ -60,8 +60,13 @@ for cfg in $(find $DIRS -maxdepth 2 \( -name '*.conf' -o -name '*.ovpn' \) 2>/de
     emit "$ifc" "${peer:-}"
   else
     sfile=$(awk 'tolower($1)=="status"{print $2; exit}' "$cfg")
-    txt=$( [ -n "$sfile" ] && cat "$sfile" 2>/dev/null )   # status file read directly; `cat` isn't in sudoers (sudo'ing it only logged failed-sudo) — make the file group-readable instead
-    vlist=$(printf '%s' "$txt" | awk -F'\t' '$1=="ROUTING_TABLE"{print $2}')
+    # Read the status file directly; it must be group-readable because no file reader is in sudoers.
+    vlist=$( [ -n "$sfile" ] && awk -F'\t' '
+      $1=="ROUTING_TABLE" { print $2; next }
+      /^ROUTING_TABLE,/ { split($0, f, ","); print f[2]; next }
+      $0=="ROUTING TABLE" { v1=1; next }
+      $0=="GLOBAL STATS"  { v1=0 }
+      v1 && $0 !~ /^Virtual Address,/ { split($0, f, ","); print f[1] }' "$sfile" 2>/dev/null)
     if [ -n "$vlist" ]; then for v in $vlist; do case "$v" in ''|*[!0-9.]*) continue ;; esac; emit "$ifc" "$v"; done
     else emit "$ifc" ""; fi
   fi

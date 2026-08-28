@@ -1,17 +1,35 @@
-# local cruft
+# Public repository allowlist. Everything else stays local by default.
+*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/collectors/
+!/collectors/**
+!/docs/
+!/docs/**
+!/installers/
+!/installers/**
+!/lib/
+!/lib/**
+!/templates/
+!/templates/**
+
+# Local artifacts and secrets stay denied inside allowed directories.
 *.tmp
 *.output
 *.log
 .DS_Store
-# secrets must never land here (configs with PrivateKey/PresharedKey, sudoers copies)
 *.key
+*.pem
+*.p12
+*.pfx
 *-private.conf
+.env
+.env.*
+credentials
+credentials.*
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 secrets/
-# Serena agent workspace
-.serena/
-# Claude Code local/session state (scheduled-task locks etc.)
-.claude/
-# agent/editor tooling configs (local)
-.mcp.json
-opencode.json
-.opencode/
