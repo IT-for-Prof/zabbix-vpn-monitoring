@@ -51,14 +51,16 @@ correct verdict.
 
 ## Install
 
-`installers/install.sh` is idempotent (backs up prior scripts, ensures agent `Timeout≥30`, installs only
-collectors whose tech is present, sets the narrow read-only sudoers). Then link the host to the template.
+`installers/install.sh` is idempotent (backs up prior scripts, ensures agent `Timeout≥30`, installs all
+collectors, lets absent backends self-gate, and sets the narrow read-only sudoers). Then link the host to the template.
 FreeBSD/pfSense is a separate manual step — see [`docs/DEPLOY-POSTURE.md`](docs/DEPLOY-POSTURE.md).
 
 Linux prerequisites: Zabbix Agent 2 already installed (`zabbix_agent2`, systemd unit, and
 `/etc/zabbix/zabbix_agent2.d/`), Bash, `sudo`/`visudo`, `ip`, `ping`, and `getcap`/`setcap`.
 The VPN CLIs are optional globally but required for their own collectors (`wg` or `awg`,
-`zerotier-cli`, and OpenVPN status or `sacli`). Deploy from the repository root:
+`zerotier-cli`, and OpenVPN status or `sacli`). Python 3 is required for ZeroTier discovery/liveness
+and OpenVPN liveness/Access Server discovery; `socat` is required only when an OpenVPN management
+socket is the status source. Deploy from the repository root:
 
 ```sh
 sudo bash installers/install.sh
