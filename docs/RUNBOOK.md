@@ -1,6 +1,6 @@
 # Runbook — VPN Tunnel MTU monitoring (Zabbix template 14009)
 
-Probe value (`vpn.pmtu` / `wg.pmtu`): **-2** offline (data-only) · **-1** live but no ICMP reply (data-only) · **0** healthy · **>0** MTU black-hole gap in bytes — **the only thing that pages**.
+Probe value (`vpn.pmtu` / `wg.pmtu`): **-2** offline (data-only) · **-1** live but no ICMP reply (data-only) · **0** healthy · **>0** MTU black-hole gap in bytes — **the only tunnel-state value that pages**. Missing probe data is reported separately as monitoring health, never as an MTU or reachability fault.
 
 ## Alerts → response
 
@@ -19,8 +19,11 @@ No `wg.count` for 30m → agent / scripts / active-checks broken (NOT a tunnel i
 `systemctl status zabbix-agent2`; confirm `ServerActive=`; `zabbix_agent2 -t wg.count`; check `/etc/zabbix/scripts/`.
 
 ### `probe broken on <host>` — HIGH, pages
-`wg.probe.ok=0` → `ping` lost `cap_net_raw`, so it can't set DF (every peer would falsely read unreachable).
+`wg.probe.ok=0`, or no canary value while `wg.count` remains fresh → a shared PMTU runner/UserParameter is missing or invalid, or `ping` lost `cap_net_raw` and cannot set DF.
 `setcap cap_net_raw+ep "$(command -v ping)"` or re-run `installers/install.sh`.
+
+### `… PMTU data missing` — WARNING
+This one target has produced no `wg.pmtu`/`vpn.pmtu` value for `{$VPN.PROBE.NODATA}` (default 45m), while shared Agent2 delivery and the common probe canary are healthy. Inline health checks close this event if either shared path fails later; Zabbix trigger dependencies alone would freeze an already-open child. Offline and ICMP-dark targets continue to return `-2`/`-1`, so neither state opens this event. Check the item state/error and run its exact key with `zabbix_agent2 -t`; re-run `installers/install.sh` if the UserParameter or script is missing. A vanished LLD target is disabled immediately and does not open this event.
 
 ### `… probe target unreachable` (=-1) — DISABLED, data-only
 Not paged. A live tunnel whose target stops answering ICMP. Common for **OpenVPN-AS clients** (host firewall) and **pfSense peers** lacking an ICMP pass rule on the tunnel iface (`pass in quick on tun_wgN inet proto icmp`). MTU is unmeasurable to a dark peer — expected, not a fault.
@@ -38,6 +41,7 @@ Defense-in-depth note: a gateway forwards TCP through this tunnel with no MSS cl
 
 ## Good to know
 - **Alerts need agreement across `{$VPN.HYST.WINDOW}` (default 25m), not just one bad read.** Every sample in that window must agree before a trigger pages, so expect up to ~25m from "went bad" to "paged" (posture and black-hole alike; the probe-capability canary too). Tunable per host — but if you raise `{$VPN.PROBE.INTERVAL}` somewhere, raise `{$VPN.HYST.WINDOW}` on the same host to ≥2x it, or the window holds a single sample and the hysteresis silently stops working. It is time-based rather than count-based (`#N`) precisely because proxy-group / dual-`ServerActive` hosts write two samples per poll, which made `#2` cover one poll instead of two.
+- **Per-target freshness uses `{$VPN.PROBE.NODATA}` (default 45m).** Keep it longer than `{$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}` so a host-wide collection loss produces only the shared monitoring-blind event. The MTU-gap expressions stop trusting stale history after `{$VPN.HYST.WINDOW}`; this closes an old gap before the missing-data event can open.
 - The probe is **bisection-bounded** (≤~30s at any MTU); the agent **`Timeout` must be ≥30** (`install.sh` sets it).
 - **`tcp_mtu_probing=1`** (set fleet-wide) lets TCP self-heal through ICMP black holes (PLPMTUD) — complements the probe.
 - The active ICMP-DF probe is the **only** endpoint detector for a *silent* black hole; passive counters and socket-TCP are blind.

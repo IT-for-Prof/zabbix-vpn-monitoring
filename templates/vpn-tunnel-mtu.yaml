@@ -16,12 +16,12 @@ zabbix_export:
         License: MIT (c) 2026 Konstantin Tyutyunnik
       vendor:
         name: itforprof.com
-        version: 1.2.0
+        version: 1.3.0
       groups:
         - name: Templates/Custom
       items:
         - uuid: b09a40f9897b4aaeb9035264f6a53aaa
-          name: 'WireGuard: interface count'
+          name: 'VPN monitoring heartbeat: WireGuard interface count'
           type: ZABBIX_ACTIVE
           key: wg.count
           delay: 1m
@@ -32,7 +32,7 @@ zabbix_export:
           triggers:
             - uuid: 54fba6edb09a407bb9243248bac70f87
               expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
-              name: 'WireGuard: monitoring blind on {HOST.NAME}'
+              name: 'VPN: monitoring blind on {HOST.NAME}'
               opdata: 'last wg.count={ITEM.LASTVALUE1} (0 is valid)'
               priority: HIGH
               description: 'No wg.count value for {$VPN.WATCHDOG.WINDOW}: delivery through this Agent2 active-check/UserParameter path is broken. A collected 0 is valid and keeps the delivery heartbeat healthy; it does not prove that backend-specific discovery or probes work. Restore shared data delivery before investigating dependent tunnel/posture alerts. Default nodata mode is intentional: it avoids a host-alert storm after a Zabbix proxy outage; monitor proxy availability separately.'
@@ -40,11 +40,11 @@ zabbix_export:
                 - tag: scope
                   value: availability
         - uuid: 2a2531cc0c8f4a17a392cf59b3715cd5
-          name: 'WireGuard: probe capability'
+          name: 'VPN: probe capability'
           type: ZABBIX_ACTIVE
           key: wg.probe.ok
           delay: 5m
-          description: 'Probe-health canary: 1 if ping can send a DF packet to loopback (cap_net_raw present), else 0. Guards against a stripped capability being misread as every peer going unreachable.'
+          description: 'Shared probe-health canary: 1 if the installed generic/WireGuard PMTU runners and generic UserParameter are present and syntactically valid and ping can send a DF packet to loopback; otherwise 0. The backward-compatible wg.probe.ok key is retained for existing history and dashboards.'
           valuemap:
             name: 'Probe capability'
           tags:
@@ -54,13 +54,13 @@ zabbix_export:
               value: probe
           triggers:
             - uuid: ad1b664cf93e4132bfb2a9257d132d6a
-              expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
-              name: 'WireGuard: probe broken on {HOST.NAME}'
-              opdata: 'DF canary={ITEM.LASTVALUE1} (1=ok, 0=broken)'
+              expression: '(nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1)'
+              name: 'VPN: probe broken on {HOST.NAME}'
+              opdata: 'probe canary={ITEM.LASTVALUE1} (1=ok, 0=broken)'
               priority: HIGH
-              description: 'ping cannot send DF packets (cap_net_raw likely lost). Per-tunnel unreachable alerts are suppressed via dependency while this is active — fix the probe, do not chase peers. Itself suppressed by the monitoring-blind watchdog: a silent agent is one alert, not two.'
+              description: 'The shared PMTU runners/UserParameter are missing or invalid, ping cannot send DF packets, or this canary alone stopped producing data while the delivery heartbeat remained fresh. Per-tunnel missing-data expressions require a healthy canary and therefore close or stay quiet during this failure. The heartbeat freshness guard prevents a silent host from being misreported as a probe fault; the monitoring-blind watchdog remains the single parent event.'
               dependencies:
-                - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                - name: 'VPN: monitoring blind on {HOST.NAME}'
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
               tags:
                 - tag: scope
@@ -93,7 +93,7 @@ zabbix_export:
                   priority: WARNING
                   description: 'The WG interface MTU ({ITEM.LASTVALUE}) exceeds the safe ceiling {$VPN.MTU.MAX} for its underlay -> large/forwarded packets silently black-hole. Lower the iface MTU (and add an MSS clamp). Config-plane check: does not flap, immune to channel-down false positives. Hysteresis over {$VPN.HYST.WINDOW} avoids a single bad read — time-based on purpose, since a count-based #2 collapses to one poll on hosts that write duplicate samples.'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
@@ -136,7 +136,7 @@ zabbix_export:
                   dependencies:
                     - name: 'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}'
                       expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>{$VPN.MTU.MAX} and count(/VPN Tunnel MTU by Zabbix agent/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1'
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
@@ -171,17 +171,25 @@ zabbix_export:
                   value: openvpn
               trigger_prototypes:
                 - uuid: 8d102e679715443a8a5737a5f35b3595
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path. (mssfix only protects TCP; a >0 here means non-TCP/UDP traffic black-holes.)'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
+                - uuid: 0bffb7f54e793151347b030b72fadf7d
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1'
+                  name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
+                  priority: WARNING
+                  description: 'No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1, so this reports a blind probe path, not tunnel reachability. The discovery rule disables vanished OpenVPN clients immediately. Inline heartbeat/canary health guards prevent opening during a shared failure and close an already-open event if a shared failure begins later.'
+                  tags:
+                    - tag: scope
+                      value: availability
                 - uuid: 026b8482179543538f6585edf856cfef
                   expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable'
@@ -190,10 +198,10 @@ zabbix_export:
                   description: 'DATA-ONLY (disabled): a sustained -1 = live tunnel whose target stops answering ICMP. OpenVPN-AS clients are commonly ICMP-dark (host firewall), so this is expected and not paged.'
                   manual_close: 'YES'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
-                    - name: 'WireGuard: probe broken on {HOST.NAME}'
-                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
+                    - name: 'VPN: probe broken on {HOST.NAME}'
+                      expression: '(nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1)'
                   tags:
                     - tag: scope
                       value: liveness
@@ -227,17 +235,25 @@ zabbix_export:
                   value: '{#WG_IFACE}'
               trigger_prototypes:
                 - uuid: 440a922390684e5a9e480800df71d792
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower tunnel MTU or fix the path.'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
+                - uuid: a750b79db23b92e4868a8c570476590c
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.PROBE.NODATA})=1'
+                  name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: PMTU data missing on {HOST.NAME}'
+                  priority: WARNING
+                  description: 'No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark peers still return -2/-1, so this reports a blind probe path, not peer reachability. Inline heartbeat/canary health guards prevent opening during a shared failure and close an already-open event if a shared failure begins later.'
+                  tags:
+                    - tag: scope
+                      value: availability
                 - uuid: 41a00e7d6c0a4746888ef6c1f714bc70
                   expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: probe target unreachable'
@@ -246,10 +262,10 @@ zabbix_export:
                   description: 'DATA-ONLY (disabled): liveness cannot be paged without false positives on roaming/mobile peers. Offline peers report -2 (handshake gate); a sustained -1 means a live tunnel whose target stopped answering ICMP. Re-enable per-peer only with an explicit opt-in gate if precise dead-peer paging is wanted.'
                   manual_close: 'YES'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
-                    - name: 'WireGuard: probe broken on {HOST.NAME}'
-                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
+                    - name: 'VPN: probe broken on {HOST.NAME}'
+                      expression: '(nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1)'
                   tags:
                     - tag: scope
                       value: liveness
@@ -283,17 +299,25 @@ zabbix_export:
                   value: '{#VPN_TECH}'
               trigger_prototypes:
                 - uuid: 924a12ae1293476691aa656997526cc0
-                  expression: 'min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path.'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
                   tags:
                     - tag: scope
                       value: mtu
+                - uuid: ab7cc6827767d36dc2f00889f57a66a4
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.PROBE.NODATA})=1'
+                  name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
+                  priority: WARNING
+                  description: 'No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1, so this reports a blind probe path, not tunnel reachability. Inline heartbeat/canary health guards prevent opening during a shared failure and close an already-open event if a shared failure begins later.'
+                  tags:
+                    - tag: scope
+                      value: availability
                 - uuid: 3d5cb4811b8b42a3a4b4352bdbe9b082
                   expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable'
@@ -302,10 +326,10 @@ zabbix_export:
                   description: 'DATA-ONLY (disabled): liveness is not paged (false positives on roaming peers). Offline reports -2; a sustained -1 means a live tunnel whose target stopped answering ICMP.'
                   manual_close: 'YES'
                   dependencies:
-                    - name: 'WireGuard: monitoring blind on {HOST.NAME}'
+                    - name: 'VPN: monitoring blind on {HOST.NAME}'
                       expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
-                    - name: 'WireGuard: probe broken on {HOST.NAME}'
-                      expression: 'max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1'
+                    - name: 'VPN: probe broken on {HOST.NAME}'
+                      expression: '(nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1)'
                   tags:
                     - tag: scope
                       value: liveness
@@ -327,6 +351,9 @@ zabbix_export:
         - macro: '{$VPN.PROBE.INTERVAL}'
           value: 10m
           description: 'Poll interval for the active per-tunnel PMTU probe items (wg.pmtu/vpn.pmtu). Each probe does two key-free `wg show` reads via NOPASSWD sudo; an MTU black hole is a config-stable event, so 10m is ample and roughly halves the agent''s sudo rate vs the old 5m (host security tooling alerts on service-account sudo volume). Lower only if you need faster black-hole detection. RAISING this per host requires raising {$VPN.HYST.WINDOW} on the same host to >=2x the new value (>12m30s at the 25m default leaves one sample in the window and silently disables the hysteresis — the very defect {$VPN.HYST.WINDOW} exists to prevent). No static check can catch that: the test only sees template defaults, never per-host overrides.'
+        - macro: '{$VPN.PROBE.NODATA}'
+          value: 45m
+          description: 'Per-target PMTU no-data window. It must remain longer than {$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}; the 45m default gives the 30m shared delivery watchdog time to become the single parent problem before a child probe is declared blind. Offline and ICMP-dark targets keep returning -2/-1 and therefore never trip this check. Default nodata mode stays proxy-aware to avoid an event fan-out after proxy outages. Raise this macro together with any longer watchdog/probe interval.'
         - macro: '{$VPN.PROBE.TARGETS}'
           description: 'Per-iface probe-target overrides for non-WireGuard tunnels (OpenVPN/ZeroTier). Comma-separated iface=ip list, e.g. "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Read by the per-tech discovery LLD keys; ifaces are unique across techs.'
         - macro: '{$WG.PROBE.TARGETS}'
@@ -343,7 +370,7 @@ zabbix_export:
           name: 'Probe capability'
           mappings:
             - value: '0'
-              newvalue: 'broken (cap_net_raw lost)'
+              newvalue: 'broken (shared probe unavailable)'
             - value: '1'
               newvalue: ok
         - uuid: 1053e3fe445d4fa285aff515617cd7d7

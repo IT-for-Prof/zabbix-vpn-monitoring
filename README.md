@@ -25,6 +25,12 @@ Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handsh
   granted), ZeroTier via `zerotier-cli -j listnetworks`, OpenVPN via status file / mgmt socket /
   `sacli VPNStatus`. `-2`/`-1` are the **normal** state of a roaming or firewalled peer, so they never
   page; the "probe target unreachable" trigger ships **disabled**.
+- **Quiet per-target freshness:** a PMTU item that produces no value for `{$VPN.PROBE.NODATA}` (default
+  45m) raises one monitoring-health Warning only while the shared Agent2 heartbeat and probe canary are
+  healthy. Inline health guards also close an already-open per-target event if a shared failure starts
+  later. Offline/ICMP-dark targets still emit `-2`/`-1`, vanished LLD targets are disabled immediately,
+  and proxy-aware `nodata()` prevents a proxy outage from fanning out into per-tunnel events. MTU-gap
+  expressions explicitly reject stale history before the missing-data event can open.
 - **MTU posture (config-plane, no probing):** the active probe is blind to a *far-end-larger* MTU
   asymmetry (the small end can't emit the dangerous size) and to forwarded/unclamped-TCP black holes.
   `collectors/posture/vpn_posture.sh` (WireGuard/AmneziaWG; POSIX sh, Linux + FreeBSD/pfSense) reads

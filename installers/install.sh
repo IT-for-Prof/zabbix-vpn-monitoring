@@ -151,7 +151,7 @@ zabbix_agent2 -t 'wg.discovery[]' || true
 zabbix_agent2 -t 'zerotier.discovery[]' || true   # SUPPORTED everywhere; {"data":[]} on non-ZT hosts, populated on ZT hosts
 zabbix_agent2 -t 'openvpn.discovery[]' || true    # community + Access Server; empty where no OpenVPN
 probe=$(zabbix_agent2 -t wg.probe.ok 2>&1 || true); echo "$probe"
-echo "$probe" | grep -q '|1]' || echo "WARN: wg.probe.ok != 1 — ping likely lacks cap_net_raw; the probe-broken trigger will fire"
+echo "$probe" | grep -q '|1]' || echo "WARN: wg.probe.ok != 1 — PMTU runner/UserParameter or ping cap_net_raw is unavailable; the probe-broken trigger will fire"
 # P2 smoke (per present binary): the zabbix user must be able to read handshakes via sudo
 # (bare `wg`/`awg` mirrors the runtime path), else the gate fail-safes to Phase-1 (offline
 # peers read -1 instead of -2). And the key-exposing `dump` must be denied.
