@@ -5,6 +5,10 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SCR=/etc/zabbix/scripts; CONF=/etc/zabbix/zabbix_agent2.d/wireguard.conf
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+command -v python3 >/dev/null 2>&1 \
+  || echo "WARN: python3 missing — ZeroTier discovery/liveness and OpenVPN liveness/Access Server discovery are unavailable."
+command -v socat >/dev/null 2>&1 \
+  || echo "note: socat missing — OpenVPN management-socket status is unavailable (status files and sacli still work)."
 install -d "$SCR"
 # Back up the prior script SET before overwriting, so a broken re-install rolls back fast.
 # (The shim resolves siblings by dirname; a half-updated set breaks every wg.pmtu item.)
