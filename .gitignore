@@ -20,5 +20,16 @@
 *.log
 .DS_Store
 *.key
+*.pem
+*.p12
+*.pfx
 *-private.conf
+.env
+.env.*
+credentials
+credentials.*
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 secrets/
