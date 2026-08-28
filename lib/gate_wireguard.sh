@@ -19,13 +19,15 @@
 # lets the grant be fully literal with no wildcard at all; we filter to $ifc here instead.
 set -u
 ifc=${1:?usage: gate_wireguard.sh <iface> <target_ip>}; tgt=${2:?}
-bin=wg; case "$ifc" in awg*) bin=awg;; esac          # AmneziaWG mirrors wg's CLI
-command -v "$bin" >/dev/null 2>&1 || bin=wg          # fall back if awg absent
 # direct first; sudo -n ONLY if the binary exists (never sudo an absent cmd -> no failed-sudo noise)
-show() { "$bin" show all "$1" 2>/dev/null || { command -v "$bin" >/dev/null 2>&1 && sudo -n "$bin" show all "$1" 2>/dev/null; }; }
-# allowed-ips (all): "<iface>\t<pubkey>\t<ip> [ip ...]" -> peer on THIS iface owning <target>/32.
-# The $1==i guard is load-bearing: the same /32 can exist on several interfaces.
-pk=$(show allowed-ips | awk -v i="$ifc" -v t="$tgt/32" '$1==i { for (n=3;n<=NF;n++) if ($n==t) { print $2; exit } }')
-[ -n "$pk" ] || exit 0                               # target not a /32 peer -> let probe run
-# latest-handshakes (all): "<iface>\t<pubkey>\t<epoch>" (0 = never)
-show latest-handshakes | awk -v i="$ifc" -v p="$pk" '$1==i && $2==p { print $3; exit }'
+show() { "$1" show all "$2" 2>/dev/null || sudo -n "$1" show all "$2" 2>/dev/null; }
+for bin in wg awg; do
+  command -v "$bin" >/dev/null 2>&1 || continue
+  # allowed-ips (all): "<iface>\t<pubkey>\t<ip> [ip ...]" -> peer on THIS iface owning <target>/32.
+  # The $1==i guard is load-bearing: the same /32 can exist on several interfaces.
+  pk=$(show "$bin" allowed-ips | awk -v i="$ifc" -v t="$tgt/32" '$1==i { for (n=3;n<=NF;n++) if ($n==t) { print $2; exit } }')
+  [ -n "$pk" ] || continue                           # this tool does not own the target peer
+  # latest-handshakes (all): "<iface>\t<pubkey>\t<epoch>" (0 = never)
+  show "$bin" latest-handshakes | awk -v i="$ifc" -v p="$pk" '$1==i && $2==p { print $3; exit }'
+  exit 0
+done
