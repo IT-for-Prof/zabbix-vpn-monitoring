@@ -182,7 +182,7 @@ zabbix_export:
                   tags:
                     - tag: scope
                       value: mtu
-                - uuid: 0bffb7f54e793151347b030b72fadf7d
+                - uuid: 459840644bf04b9b8eae8c7323bf9098
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
                   priority: WARNING
@@ -246,7 +246,7 @@ zabbix_export:
                   tags:
                     - tag: scope
                       value: mtu
-                - uuid: a750b79db23b92e4868a8c570476590c
+                - uuid: e4ff90018ca94184a1d56337c95755c7
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.PROBE.NODATA})=1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: PMTU data missing on {HOST.NAME}'
                   priority: WARNING
@@ -310,7 +310,7 @@ zabbix_export:
                   tags:
                     - tag: scope
                       value: mtu
-                - uuid: ab7cc6827767d36dc2f00889f57a66a4
+                - uuid: d7bb03b18d7242cb87ed4d33263b1cad
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.PROBE.NODATA})=1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
                   priority: WARNING
