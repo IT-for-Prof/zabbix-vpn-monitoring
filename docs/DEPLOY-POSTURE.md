@@ -18,7 +18,7 @@ A WireGuard host needs onboarding if it isn't linked to the template yet. List c
 1. **Deploy the collector** — idempotent installer (full set) or surgical (posture only):
    ```sh
    # full (also (re)installs the active probe — idempotent):
-   tar c collectors lib installers tests | ssh <host> 'mkdir -p /tmp/zvm && tar x -C /tmp/zvm && cd /tmp/zvm && bash installers/install.sh'
+   tar c collectors lib installers | ssh <host> 'mkdir -p /tmp/zvm && tar x -C /tmp/zvm && cd /tmp/zvm && bash installers/install.sh'
 
    # OR surgical (posture only):
    scp collectors/posture/vpn_posture.sh <host>:/etc/zabbix/scripts/vpn_posture.sh
@@ -78,8 +78,8 @@ The agent runs **as root** (no sudo needed) and `install.sh` does **not** suppor
   whose agent writes the same value twice per poll — proxy-group / dual-`ServerActive` setups do — makes
   `#2` span a single poll and silently disables the hysteresis. **If you raise `{$VPN.PROBE.INTERVAL}` on a
   host, raise this on the same host to >=2x the new value**, or the window holds one sample again and the
-  hysteresis is gone. Nothing checks that for you — `tests/test-template-triggers.sh` validates template
-  defaults, never per-host overrides.
+  hysteresis is gone. Keep both conditions when editing the imported template; the imported template is
+  the runtime authority.
 
 ## What auto-discovers, what does not
 
