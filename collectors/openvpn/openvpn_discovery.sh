@@ -63,6 +63,7 @@ for cfg in $(find $DIRS -maxdepth 2 \( -name '*.conf' -o -name '*.ovpn' \) 2>/de
     # Read the status file directly; it must be group-readable because no file reader is in sudoers.
     vlist=$( [ -n "$sfile" ] && awk -F'\t' '
       $1=="ROUTING_TABLE" { print $2; next }
+      /^ROUTING_TABLE,/ { split($0, f, ","); print f[2]; next }
       $0=="ROUTING TABLE" { v1=1; next }
       $0=="GLOBAL STATS"  { v1=0 }
       v1 && $0 !~ /^Virtual Address,/ { split($0, f, ","); print f[1] }' "$sfile" 2>/dev/null)
