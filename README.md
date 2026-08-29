@@ -25,6 +25,13 @@ Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handsh
   granted), ZeroTier via `zerotier-cli -j listnetworks`, OpenVPN via status file / mgmt socket /
   `sacli VPNStatus`. `-2`/`-1` are the **normal** state of a roaming or firewalled peer, so they never
   page; the "probe target unreachable" trigger ships **disabled**.
+- **Whole-host silence is not our alert:** the `wg.count` watchdog cannot tell "this template's
+  UserParameters broke" from "the agent stopped talking" — both look like no data. A second,
+  UserParameter-free heartbeat (the built-in `agent.variant` key, `{$VPN.AGENT.WINDOW}` = 15m) goes
+  quiet first and suppresses the watchdog, so whole-host silence stays with the host's own
+  agent-availability alert and `monitoring blind` pages only for a genuinely VPN-specific failure.
+  A host with no OS/agent template has no owner for that alert — link the stock **Zabbix agent
+  active** template there (see [`DEPLOY-POSTURE.md`](docs/DEPLOY-POSTURE.md)).
 - **Quiet per-target freshness:** a PMTU item that produces no value for `{$VPN.PROBE.NODATA}` (default
   45m) raises one monitoring-health Warning only while the shared Agent2 heartbeat and probe canary are
   healthy. Inline health guards also close an already-open per-target event if a shared failure starts

@@ -15,8 +15,13 @@ A live tunnel delivers small packets but drops at-MTU packets (silent black hole
 3. Verify: the item returns to `0`.
 
 ### `monitoring blind on <host>` — HIGH, pages
-No `wg.count` for 30m → agent / scripts / active-checks broken (NOT a tunnel issue).
-`systemctl status zabbix-agent2`; confirm `ServerActive=`; `zabbix_agent2 -t wg.count`; check `/etc/zabbix/scripts/`.
+No `wg.count` for 30m **while the agent is still delivering** → this template's scripts / UserParameters are broken (NOT a tunnel issue, and not a dead agent — that case is suppressed, see below).
+`zabbix_agent2 -t wg.count`; check `/etc/zabbix/scripts/`; re-run `installers/install.sh`.
+
+### `host agent silent on <host>` — NOT CLASSIFIED, never paged
+The whole active-check channel is quiet: the built-in `agent.variant` heartbeat produced nothing for `{$VPN.AGENT.WINDOW}` (default 15m). Its only job is to open **before** the 30m watchdog and suppress it, so a dead agent pages once — from the host's own agent-availability trigger — instead of twice. Zabbix dependencies never suppress an already-open event, hence the 15m/30m split; raise both together or not at all.
+If this is open and *nothing else* alerted, the host has no agent-availability owner: link the stock **Zabbix agent active** template to it (see [`DEPLOY-POSTURE.md`](DEPLOY-POSTURE.md)). Otherwise respond to the agent alert: `systemctl status zabbix-agent2`, confirm `ServerActive=`, check the proxy.
+Two cases where you still get both alerts, both deliberate and both self-healing: an event already open when the anchor opens stays open (Zabbix never suppresses retroactively), and a host that has never delivered a single `agent.variant` value leaves the anchor UNKNOWN rather than PROBLEM — it starts suppressing after the first collected value. Failing this way round is the point: a lost anchor costs one duplicate page, never silence.
 
 ### `probe broken on <host>` — HIGH, pages
 `wg.probe.ok=0`, or no canary value while `wg.count` remains fresh → a shared PMTU runner/UserParameter is missing or invalid, or `ping` lost `cap_net_raw` and cannot set DF.
@@ -41,7 +46,7 @@ Defense-in-depth note: a gateway forwards TCP through this tunnel with no MSS cl
 
 ## Good to know
 - **Alerts need agreement across `{$VPN.HYST.WINDOW}` (default 25m), not just one bad read.** Every sample in that window must agree before a trigger pages, so expect up to ~25m from "went bad" to "paged" (posture and black-hole alike; the probe-capability canary too). Tunable per host — but if you raise `{$VPN.PROBE.INTERVAL}` somewhere, raise `{$VPN.HYST.WINDOW}` on the same host to ≥2x it, or the window holds a single sample and the hysteresis silently stops working. It is time-based rather than count-based (`#N`) precisely because proxy-group / dual-`ServerActive` hosts write two samples per poll, which made `#2` cover one poll instead of two.
-- **Per-target freshness uses `{$VPN.PROBE.NODATA}` (default 45m).** Keep it longer than `{$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}` so a host-wide collection loss produces only the shared monitoring-blind event. The MTU-gap expressions stop trusting stale history after `{$VPN.HYST.WINDOW}`; this closes an old gap before the missing-data event can open.
+- **Per-target freshness uses `{$VPN.PROBE.NODATA}` (default 45m).** Keep it longer than `{$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}` so a host-wide collection loss produces only the shared event and never a fan-out of per-target ones — the monitoring-blind watchdog when the agent still delivers, the host's own agent-availability alert when it does not. The MTU-gap expressions stop trusting stale history after `{$VPN.HYST.WINDOW}`; this closes an old gap before the missing-data event can open.
 - The probe is **bisection-bounded** (≤~30s at any MTU); the agent **`Timeout` must be ≥30** (`install.sh` sets it).
 - **`tcp_mtu_probing=1`** (set fleet-wide) lets TCP self-heal through ICMP black holes (PLPMTUD) — complements the probe.
 - The active ICMP-DF probe is the **only** endpoint detector for a *silent* black hole; passive counters and socket-TCP are blind.

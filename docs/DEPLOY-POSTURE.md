@@ -66,6 +66,12 @@ The agent runs **as root** (no sudo needed) and `install.sh` does **not** suppor
    UNSUPPORTED): set host-level `status=disabled` on item `wg.probe.ok` and on the LLD rules
    `wg.discovery`, `openvpn.discovery`, `zerotier.discovery`. (The clean alternative is a posture-only
    template that omits the probe items for FreeBSD/posture-only hosts.)
+4. **Give the host an agent-availability owner.** A pfSense host carries no OS template, so nothing
+   alerts when its agent dies while the box stays pingable — and since 1.4.0 this template deliberately
+   stops covering that case (`VPN: host agent silent` suppresses the watchdog instead of paging).
+   Link the **stock `Zabbix agent active` template**: three items (`agent.ping`, `agent.version`,
+   `agent.hostname`) plus the standard *Zabbix agent is not available* trigger, no OS-specific keys, and
+   no key collision with this template or with the pfSense one. Do **not** invent a local equivalent.
 
 ## Macros
 
