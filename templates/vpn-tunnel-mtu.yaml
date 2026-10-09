@@ -199,6 +199,7 @@ zabbix_export:
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
+                  manual_close: 'YES'
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path. (mssfix only protects TCP; a >0 here means non-TCP/UDP traffic black-holes.)'
                   dependencies:
                     - name: 'VPN: monitoring blind on {HOST.NAME}'
@@ -212,6 +213,7 @@ zabbix_export:
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
                   priority: WARNING
+                  manual_close: 'YES'
                   description: 'No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1, so this reports a blind probe path, not tunnel reachability. The discovery rule disables vanished OpenVPN clients immediately. Inline heartbeat/canary health guards prevent opening during a shared failure and close an already-open event if a shared failure begins later.'
                   tags:
                     - tag: scope

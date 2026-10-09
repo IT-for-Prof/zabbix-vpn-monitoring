@@ -120,6 +120,10 @@ def test_template_suppresses_dynamic_openvpn_alerts_but_keeps_static_alerts():
         '{$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1' in trigger["expression"]
         for trigger in item["trigger_prototypes"]
     )
+    assert all(
+        trigger.get("manual_close") == "YES"
+        for trigger in item["trigger_prototypes"]
+    )
 
 
 if __name__ == "__main__":
