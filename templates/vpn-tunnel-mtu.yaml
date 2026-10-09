@@ -181,7 +181,7 @@ zabbix_export:
               key: 'vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn]'
               delay: '{$VPN.PROBE.INTERVAL}'
               value_type: FLOAT
-              description: 'Generic probe (OpenVPN). -2 offline (data-only), -1 live but no ICMP (e.g. an OpenVPN-AS client with host firewall — common), 0 healthy, >0 = MTU black-hole gap (bytes). Key uses literal ''openvpn'' (not {#VPN_TECH}) because Zabbix requires unique prototype keys per template and zerotier''s rule owns the {#VPN_TECH} form.'
+              description: 'Generic probe (OpenVPN). -2 offline (data-only), -1 live but no ICMP (e.g. an OpenVPN-AS client with host firewall — common), 0 healthy, >0 = MTU black-hole gap (bytes). {#VPN_DYNAMIC}=1 marks a roaming Access Server client; its data is retained but paging is disabled by {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}. Key uses literal ''openvpn'' (not {#VPN_TECH}) because Zabbix requires unique prototype keys per template and zerotier''s rule owns the {#VPN_TECH} form.'
               valuemap:
                 name: 'VPN PMTU probe state'
               tags:
@@ -191,9 +191,11 @@ zabbix_export:
                   value: '{#VPN_IFACE}'
                 - tag: vpn_tech
                   value: openvpn
+                - tag: vpn_dynamic
+                  value: '{#VPN_DYNAMIC}'
               trigger_prototypes:
                 - uuid: 8d102e679715443a8a5737a5f35b3595
-                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
                   priority: HIGH
@@ -204,16 +206,20 @@ zabbix_export:
                   tags:
                     - tag: scope
                       value: mtu
+                    - tag: vpn_dynamic
+                      value: '{#VPN_DYNAMIC}'
                 - uuid: 459840644bf04b9b8eae8c7323bf9098
-                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1'
+                  expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}'
                   priority: WARNING
                   description: 'No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1, so this reports a blind probe path, not tunnel reachability. The discovery rule disables vanished OpenVPN clients immediately. Inline heartbeat/canary health guards prevent opening during a shared failure and close an already-open event if a shared failure begins later.'
                   tags:
                     - tag: scope
                       value: availability
+                    - tag: vpn_dynamic
+                      value: '{#VPN_DYNAMIC}'
                 - uuid: 026b8482179543538f6585edf856cfef
-                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1'
+                  expression: 'max(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=-1 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable'
                   status: DISABLED
                   priority: AVERAGE
@@ -227,6 +233,8 @@ zabbix_export:
                   tags:
                     - tag: scope
                       value: liveness
+                    - tag: vpn_dynamic
+                      value: '{#VPN_DYNAMIC}'
         - uuid: 3e20739bcb64431fb2075503de67c1ff
           name: 'WireGuard probe-target discovery'
           type: ZABBIX_ACTIVE
@@ -359,8 +367,14 @@ zabbix_export:
         - tag: class
           value: network
         - tag: component
-          value: wireguard
+          value: vpn
       macros:
+        - macro: '{$VPN.DYNAMIC.PAGING}'
+          value: '1'
+          description: 'Per-endpoint paging switch resolved by the {#VPN_DYNAMIC} LLD macro. Static/community OpenVPN rows use 0 and page; Access Server roaming clients use 1 and remain data-only. Set the contextual value back to 1 only when dynamic client PMTU alerts are operationally required.'
+        - macro: '{$VPN.DYNAMIC.PAGING:"1"}'
+          value: '0'
+          description: 'Default context: suppress paging for dynamic Access Server clients while retaining item history and the vpn_dynamic=1 event tag.'
         - macro: '{$VPN.MTU.MAX}'
           value: '1420'
           description: 'Safe MTU ceiling for WireGuard tunnels over an internet/Xray underlay. The posture check pages (Warning) when an iface MTU exceeds this. Override per host/context where a tunnel needs a lower value (e.g. a relay host -> 1340). Sub-ceiling asymmetry (1400 where 1340 is needed) is out of scope — needs cross-host comparison.'

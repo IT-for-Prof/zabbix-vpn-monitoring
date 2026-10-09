@@ -2,6 +2,11 @@
 
 Probe value (`vpn.pmtu` / `wg.pmtu`): **-2** offline (data-only) · **-1** live but no ICMP reply (data-only) · **0** healthy · **>0** MTU black-hole gap in bytes — **the only tunnel-state value that pages**. Missing probe data is reported separately as monitoring health, never as an MTU or reachability fault.
 
+OpenVPN Access Server roaming clients are discovered and measured, but are data-only by default:
+their events carry `vpn_dynamic=1` and do not page. Static/community OpenVPN endpoints carry
+`vpn_dynamic=0` and retain normal PMTU paging. This keeps per-client data for diagnosis without
+treating short-lived or ICMP-dark user sessions as incidents.
+
 ## Alerts → response
 
 ### `… MTU black hole (gap N B)` — HIGH, pages

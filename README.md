@@ -19,6 +19,10 @@ Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handsh
   `configured_MTU − max_deliverable` (black-hole gap, bytes). `>0` only occurs on a live tunnel, so it
   never fires for an offline peer. The agent's `Timeout` must be **≥30s** (a deep black hole can run
   ~30s; `install.sh` warns if it's lower).
+- **OpenVPN Access Server clients:** dynamic `sacli VPNStatus` rows are retained as data with the
+  `vpn_dynamic=1` tag, but their per-client PMTU and freshness triggers are data-only by default. The
+  template pages static/community OpenVPN endpoints (`vpn_dynamic=0`); enable the contextual
+  `{$VPN.DYNAMIC.PAGING:"1"}=1` macro only when roaming-client alerts are operationally required.
 - **Per-tech liveness gate (data-only):** before probing, `gate_<tech>.sh` decides if the tunnel is up,
   so an offline/dark peer reads `-2`/`-1` instead of a false black hole — WireGuard/AmneziaWG via the
   **key-free** `wg show … {allowed-ips,latest-handshakes}` (narrow `sudo`; `dump`/private-key never
