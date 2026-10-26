@@ -9,7 +9,7 @@ treating short-lived or ICMP-dark user sessions as incidents.
 
 ## Alerts → response
 
-### `… MTU black hole (gap N B)` — HIGH, pages
+### `… MTU black hole (gap N B)` — AVERAGE, pages
 A live tunnel delivers small packets but drops at-MTU packets (silent black hole). `N` = configured iface MTU − largest deliverable.
 1. The trigger name has `{#VPN_IFACE}` + `{#VPN_TARGET}`. On the host, reproduce + bisect:
    `m=$(cat /sys/class/net/<iface>/mtu); ping -M do -s $((m-28)) -c2 <target>` then step the size down.
@@ -19,7 +19,7 @@ A live tunnel delivers small packets but drops at-MTU packets (silent black hole
    - Confirm **MSS clamping** on the gateway: `iptables-save | grep clamp-mss-to-pmtu` (protects forwarded TCP).
 3. Verify: the item returns to `0`.
 
-### `monitoring blind on <host>` — HIGH, pages
+### `monitoring blind on <host>` — AVERAGE, pages
 No `wg.count` for 30m **while the agent is still delivering** → this template's scripts / UserParameters are broken (NOT a tunnel issue, and not a dead agent — that case is suppressed, see below).
 `zabbix_agent2 -t wg.count`; check `/etc/zabbix/scripts/`; re-run `installers/install.sh`.
 
@@ -28,7 +28,7 @@ The whole active-check channel is quiet: the built-in `agent.variant` heartbeat 
 If this is open and *nothing else* alerted, the host has no agent-availability owner: link the stock **Zabbix agent active** template to it (see [`DEPLOY-POSTURE.md`](DEPLOY-POSTURE.md)). Otherwise respond to the agent alert: `systemctl status zabbix-agent2`, confirm `ServerActive=`, check the proxy.
 Two cases where you still get both alerts, both deliberate and both self-healing: an event already open when the anchor opens stays open (Zabbix never suppresses retroactively), and a host that has never delivered a single `agent.variant` value leaves the anchor UNKNOWN rather than PROBLEM — it starts suppressing after the first collected value. Failing this way round is the point: a lost anchor costs one duplicate page, never silence.
 
-### `probe broken on <host>` — HIGH, pages
+### `probe broken on <host>` — AVERAGE, pages
 `wg.probe.ok=0`, or no canary value while `wg.count` remains fresh → a shared PMTU runner/UserParameter is missing or invalid, or `ping` lost `cap_net_raw` and cannot set DF.
 `setcap cap_net_raw+ep "$(command -v ping)"` or re-run `installers/install.sh`.
 

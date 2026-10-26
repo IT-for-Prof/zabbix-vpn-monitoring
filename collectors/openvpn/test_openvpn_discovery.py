@@ -4,6 +4,7 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent
@@ -107,8 +108,9 @@ def test_access_server_empty_status_is_valid_but_failures_are_not_empty_rosters(
         assert result.stdout == ""
 
 
-def test_template_suppresses_dynamic_openvpn_alerts_but_keeps_static_alerts():
-    template = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))["zabbix_export"]["templates"][0]
+@pytest.mark.parametrize("template_path", [TEMPLATE, TEMPLATE.with_name("vpn-tunnel-mtu.ru.yaml")])
+def test_template_suppresses_dynamic_openvpn_alerts_but_keeps_static_alerts(template_path):
+    template = yaml.safe_load(template_path.read_text(encoding="utf-8"))["zabbix_export"]["templates"][0]
     rule = next(rule for rule in template["discovery_rules"] if rule["key"].startswith("openvpn.discovery"))
     item = rule["item_prototypes"][0]
     macros = {macro["macro"]: macro.get("value") for macro in template["macros"]}
