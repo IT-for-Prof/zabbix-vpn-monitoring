@@ -5,11 +5,46 @@ Zabbix monitoring for VPN / overlay tunnels — detection of **silent MTU/PMTU b
 
 One **technology-agnostic ICMP-DF MTU probe** (shared `lib/`) plus **per-technology liveness
 collectors** (`collectors/`), across **WireGuard/AmneziaWG, ZeroTier, and OpenVPN** (community +
-Access Server) — a single Zabbix template (`templates/vpn-tunnel-mtu.yaml`), one self-gating LLD
+Access Server) — English and Russian versions of one Zabbix template, one self-gating LLD
 rule per tech (absent tech ⇒ no items). A separate **config-plane MTU-posture** check catches the
 misconfiguration the active probe is structurally blind to, and runs on Linux *and* FreeBSD/pfSense.
 
 Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handshake) and out of scope.
+
+## Template language
+
+Import one of these Zabbix 7.0 exports:
+
+| Language | File | Technical template name |
+| --- | --- | --- |
+| English | [`vpn-tunnel-mtu.yaml`](templates/vpn-tunnel-mtu.yaml) | `VPN Tunnel MTU by Zabbix agent` |
+| Russian | [`vpn-tunnel-mtu.ru.yaml`](templates/vpn-tunnel-mtu.ru.yaml) | `VPN Tunnel MTU by Zabbix agent RU` |
+
+Both templates can exist on the same server. Link exactly one language to each host: the item keys
+are identical, so Zabbix cannot link both variants to one host. Item and event text uses the chosen
+template's language for all operators. The collectors and installation steps are the same.
+
+The English export is the source of monitoring logic. The Russian export is generated from it and
+[`localization/ru.yaml`](templates/localization/ru.yaml), which stores translations and permanent
+Russian UUIDv4 identities. The template group is shared. Keep the English identities and the stored
+Russian identities stable across releases; changing them can prevent imports from updating existing
+objects. Edit the source or catalog, then rebuild the Russian export.
+
+Development requires Python 3, PyYAML and pytest. Rebuild and check both languages from the repository root:
+
+```sh
+python3 templates/localization/build_ru.py
+python3 -m pytest -q templates/localization/test_build_ru.py collectors/openvpn/test_openvpn_discovery.py
+```
+
+The builder rejects missing translations, changed macro placeholders and invalid UUID mappings before
+writing the export. Tests compare the monitoring configuration and resolve translated references.
+The localization tools run only on the development machine; agent installation is unchanged.
+
+Switching an existing host between languages is a separate migration. Before switching, verify item
+history and existing problems on a test host. **Unlink and clear deletes inherited entities.** Review
+Actions that match event names, because translated events have different names; tags and severity
+values are the same in both variants.
 
 ## How detection works
 
@@ -95,7 +130,7 @@ Mitigations the probe **detects but does not enforce** (keep them in config mana
 ```
 lib/           shared ICMP-DF probe (vpn_pmtu.sh) + per-tech gate_<tech>.sh (wg_pmtu.sh = compat shim)
 collectors/    per-technology discovery + agent2 conf (wireguard/ zerotier/ openvpn/ posture/)
-templates/     Zabbix template YAML ("VPN Tunnel MTU by Zabbix agent")
+templates/     English/Russian Zabbix exports + Russian translation catalog and builder
 installers/    node installer/uninstaller (cap_net_raw, ServerActive, Timeout>=30, narrow sudoers)
 docs/          responder runbook + posture deploy guide
 ```

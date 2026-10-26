@@ -53,7 +53,7 @@ zabbix_export:
               expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.WATCHDOG.WINDOW})=1'
               name: 'VPN: monitoring blind on {HOST.NAME}'
               opdata: 'last wg.count={ITEM.LASTVALUE1} (0 is valid)'
-              priority: HIGH
+              priority: AVERAGE
               description: 'No wg.count value for {$VPN.WATCHDOG.WINDOW} while the agent itself is still delivering: this template''s Agent2 active-check/UserParameter path is broken. A collected 0 is valid and keeps the delivery heartbeat healthy; it does not prove that backend-specific discovery or probes work. Restore shared data delivery before investigating dependent tunnel/posture alerts. A silent host is NOT this event: the agent-liveness heartbeat goes quiet first and suppresses it, so whole-host silence stays with the owner of that alert. Default nodata mode is intentional: it avoids a host-alert storm after a Zabbix proxy outage; monitor proxy availability separately.'
               dependencies:
                 - name: 'VPN: host agent silent on {HOST.NAME}'
@@ -79,7 +79,7 @@ zabbix_export:
               expression: '(nodata(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix agent/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent/wg.probe.ok,{$VPN.HYST.WINDOW})>1)'
               name: 'VPN: probe broken on {HOST.NAME}'
               opdata: 'probe canary={ITEM.LASTVALUE1} (1=ok, 0=broken)'
-              priority: HIGH
+              priority: AVERAGE
               description: 'The shared PMTU runners/UserParameter are missing or invalid, ping cannot send DF packets, or this canary alone stopped producing data while the delivery heartbeat remained fresh. Per-tunnel missing-data expressions require a healthy canary and therefore close or stay quiet during this failure. The heartbeat freshness guard prevents a silent host from being misreported as a probe fault; the monitoring-blind watchdog remains the single parent event.'
               dependencies:
                 - name: 'VPN: monitoring blind on {HOST.NAME}'
@@ -198,7 +198,7 @@ zabbix_export:
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1'
                   name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
-                  priority: HIGH
+                  priority: AVERAGE
                   manual_close: 'YES'
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path. (mssfix only protects TCP; a >0 here means non-TCP/UDP traffic black-holes.)'
                   dependencies:
@@ -270,7 +270,7 @@ zabbix_export:
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1'
                   name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
-                  priority: HIGH
+                  priority: AVERAGE
                   description: 'Small packets deliver but at-MTU packets are dropped — lower tunnel MTU or fix the path.'
                   dependencies:
                     - name: 'VPN: monitoring blind on {HOST.NAME}'
@@ -334,7 +334,7 @@ zabbix_export:
                   expression: 'nodata(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=0 and min(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>0 and count(/VPN Tunnel MTU by Zabbix agent/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1'
                   name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole'
                   opdata: 'gap {ITEM.LASTVALUE} B'
-                  priority: HIGH
+                  priority: AVERAGE
                   description: 'Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path.'
                   dependencies:
                     - name: 'VPN: monitoring blind on {HOST.NAME}'

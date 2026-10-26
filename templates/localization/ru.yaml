@@ -1,0 +1,475 @@
+uuids:
+  59d3b052df88477c8c6d8fd14b5f2229: dc2bc7d4c5464c189089ee40a7fee329
+  2f43121aeffd44eb96d302fd1df69674: 2cbf7508c91245ddaff21ef3d24d0f59
+  e7749c971b28406a92307e43ea2a1bbc: 48b8fedcdbf444ffa5f4000eb1d6d11b
+  b09a40f9897b4aaeb9035264f6a53aaa: ae3bdb2d042340658ccda379bf7779ed
+  54fba6edb09a407bb9243248bac70f87: 5242a3f084a44295adaf5c78565bebdd
+  2a2531cc0c8f4a17a392cf59b3715cd5: c444b8fb6f25495daca8969b678bdb94
+  ad1b664cf93e4132bfb2a9257d132d6a: 59164a14d421419080706f29e5ccca00
+  92f719a27a8d43a0b1596513f3b3b418: 7e42728e14d74ffa9535cb4124507751
+  01a59d4bdb9e4a479fd0c679f1dde605: 76d0aeab964a4470bb50f2449ad7f28c
+  3ddb761cdaea445499e4ae57eddf7c29: a1609a90fabf4ffe944df58759431be5
+  2c8ba6b0ad1f4f91be765f2e558d7ae8: 2f4c5efe53504361b693b4a5d42242d9
+  39538ccad94445b1939d9e59848db64a: f578746a633c45d1a3e956cb0e5e8e7f
+  506da2ec3185425ab44ec378dbbffd3c: 85572cb9a8634372b8dc8763c8e958e6
+  de449ac37e374e9dafc0fca8e32c59b0: 64f1521864814e4c814528db500ad8ee
+  aaebad0dc7a045d7af6c5c6416749628: f560964475214b23b756e97798c72125
+  8d102e679715443a8a5737a5f35b3595: cb7e83c946074d85a4a42f5ff2f4290e
+  459840644bf04b9b8eae8c7323bf9098: af9313bf392643f3aa79ab5ef932a359
+  026b8482179543538f6585edf856cfef: b70483c208ad475b9b18a1c2fd284a99
+  3e20739bcb64431fb2075503de67c1ff: f81f8b0abfa04b8c93b6fb39345eb800
+  9087dfba84724d59b96678cba382cdee: cf1c14b65f9c46e88022b8507537eacf
+  440a922390684e5a9e480800df71d792: 79cc4f2e90704b87823885a1b3134d88
+  e4ff90018ca94184a1d56337c95755c7: 78cbe7a2eb2e4b28bfab2818c8d36ea7
+  41a00e7d6c0a4746888ef6c1f714bc70: 35f95bc9d503484b8c5f7d90f8179c24
+  5598806a5ad34db19c14f82b4334d0a8: ffba6e945ff349d0b167c55ff6df104a
+  0202eeeea9274996b19a1883312908cf: e0a9417199e449afbdc19b947d5bf143
+  924a12ae1293476691aa656997526cc0: 3f728c4c0988400086ebd302c1511d67
+  d7bb03b18d7242cb87ed4d33263b1cad: 9cf02c56f3f740d79b4478a9426d2cc7
+  3d5cb4811b8b42a3a4b4352bdbe9b082: ec8d295da70a4d81afeb6bfd16c1dcb7
+  921a5fa7515f4ea59c848da3084c454b: c53cc0d777ac4ac1ac48cbdca0576b10
+  c4e2c2161e9840c68a0d657e3830faaa: d34b2df630f64df5ae916134722d1da3
+  1053e3fe445d4fa285aff515617cd7d7: 2b5e123be2284c06b9cdc103e8e49315
+strings:
+  VPN Tunnel MTU by Zabbix agent: Мониторинг MTU VPN через агент Zabbix
+  ? 'WireGuard/VPN tunnel MTU monitoring. A differential ICMP-DF probe detects silent per-tunnel MTU black
+    holes; a handshake gate marks peers with no/stale WireGuard handshake as offline (-2, data-only) so
+    roaming/mobile peers do not false-page; plus a config-plane posture check (interface MTU vs {$VPN.MTU.MAX}
+    and MSS-clamp presence — pure sysfs/ruleset reads, no probing, so it flags a misconfigured MTU even
+    while the tunnel is down and never false-positives on a dead channel), a monitoring-blind watchdog
+    (no wg.count data) and a probe-capability canary. The watchdog is narrowed by a second, UserParameter-free
+    heartbeat (the built-in agent.variant key): when the whole active-check channel goes silent that heartbeat
+    stops first and suppresses the watchdog, so whole-host silence stays with the host''s own agent-availability
+    alert and only a genuinely VPN-specific collection failure pages here. Active agent checks; cap_net_raw
+    on ping for the probe, a narrow key-free sudoers (wg show allowed-ips/latest-handshakes) for handshake
+    age. Probe target = the peer /32 route, overridable per interface via {$WG.PROBE.TARGETS}. Four discovery
+    backends: WireGuard/AmneziaWG posture and probe targets, plus OpenVPN and ZeroTier probe targets (the
+    probe itself is VPN-agnostic; posture is WireGuard-only on purpose — OpenVPN/ZeroTier use a different
+    MTU model, mssfix/fragment ~2800, where a 1420 ceiling would false-positive). The watchdog intentionally
+    reuses the backward-compatible wg.count key as a shared Agent2 active-check/UserParameter delivery
+    heartbeat on every host installed by installers/install.sh: no wg/awg is a valid numeric 0, while
+    no value means this collection path is blind. It does not prove that every backend-specific discovery
+    or probe is healthy. Its default nodata mode is proxy-aware, so keep separate Zabbix server/proxy
+    availability monitoring.
+
+
+    Author:  Konstantin Tyutyunnik / Константин Тютюнник
+
+    Site:    https://itforprof.com
+
+    Repo:    https://github.com/IT-for-Prof/zabbix-vpn-monitoring
+
+    License: MIT (c) 2026 Konstantin Tyutyunnik
+
+    '
+  : 'Мониторинг MTU туннелей WireGuard/VPN. Дифференциальная проверка ICMP с флагом DF обнаруживает потери
+    крупных пакетов из-за MTU в отдельных туннелях. Проверка handshake отмечает узлы WireGuard с отсутствующим
+    или устаревшим handshake как отключённые (-2, только данные), чтобы перемещения мобильных клиентов
+    не вызывали ложных оповещений. Проверка конфигурации сравнивает MTU интерфейса с {$VPN.MTU.MAX} и
+    проверяет наличие ограничения MSS. Она только читает sysfs и правила фильтрации, не отправляет пакеты,
+    обнаруживает неверный MTU при отключённом туннеле и не принимает отказ канала за ошибку MTU. Шаблон
+    также контролирует поступление wg.count и работоспособность механизма проверки PMTU.
+
+
+    Дополнительный встроенный ключ agent.variant контролирует канал активных проверок без UserParameter.
+    При потере всего канала данные этого ключа перестают поступать раньше, чем срабатывает контроль wg.count,
+    и подавляют его. Об общей потере связи с агентом сообщает шаблон доступности агента на хосте; этот
+    шаблон оповещает только о сбое сбора данных VPN. Используются активные проверки агента. Для ping требуется
+    cap_net_raw, для чтения возраста handshake — узкие правила sudoers на wg show allowed-ips/latest-handshakes,
+    не раскрывающие ключи. Цель проверки берётся из маршрута /32 к узлу; для каждого интерфейса её можно
+    переопределить через {$WG.PROBE.TARGETS}.
+
+
+    Четыре правила обнаружения охватывают конфигурацию WireGuard/AmneziaWG и цели проверок WireGuard/AmneziaWG,
+    OpenVPN и ZeroTier. Сама проверка не зависит от технологии VPN. Проверка конфигурации применяется
+    только к WireGuard: у OpenVPN/ZeroTier другая модель MTU с mssfix/fragment и значениями около 2800,
+    где предел 1420 давал бы ложные срабатывания.
+
+
+    Совместимый с прежними версиями ключ wg.count контролирует общую доставку данных Agent2 через активные
+    проверки и UserParameter на всех хостах с мониторингом, установленным через installers/install.sh.
+    Если wg/awg отсутствуют, числовой 0 допустим; отсутствие значения означает потерю наблюдения за этим
+    каналом сбора. Этот контроль не подтверждает работоспособность каждого отдельного правила обнаружения
+    или проверки VPN. Режим nodata по умолчанию учитывает доступность прокси. Доступность Zabbix server/proxy
+    нужно контролировать отдельно.
+
+
+    Author:  Konstantin Tyutyunnik / Константин Тютюнник
+
+    Site:    https://itforprof.com
+
+    Repo:    https://github.com/IT-for-Prof/zabbix-vpn-monitoring
+
+    License: MIT (c) 2026 Konstantin Tyutyunnik
+
+    '
+  'VPN monitoring heartbeat: Zabbix agent liveness': 'Контроль мониторинга VPN: доступность агента Zabbix'
+  ? 'Built-in agent key (1 = Zabbix agent, 2 = Zabbix agent 2) used as a second, UserParameter-free heartbeat
+    on the same active-check channel. It separates the two failures wg.count alone cannot tell apart:
+    silent here too means the whole active-check channel is down, which the host''s OS/agent template
+    already alerts on; arriving while wg.count does not means this template''s UserParameters are broken,
+    which is what the monitoring-blind watchdog is for. Deliberately a native agent key rather than a
+    calculated copy of another template''s item: it stays supported on every host that runs an agent (verified
+    on FreeBSD/pfSense) and adds no cross-template link requirement. No stock OS template uses this key,
+    so it never collides on link.'
+  : Встроенный ключ агента (1 = Zabbix agent, 2 = Zabbix agent 2) дополнительно контролирует тот же канал
+    активных проверок без UserParameter. Он различает два сбоя, которые wg.count сам не различает. Если
+    данные не поступают и здесь, недоступен весь канал активных проверок; об этом уже оповещает шаблон
+    ОС/агента на хосте. Если этот ключ поступает, а wg.count отсутствует, сломаны UserParameter этого
+    шаблона; для такого случая предусмотрен контроль потери данных VPN. Используется встроенный ключ агента,
+    поэтому не нужна вычисляемая копия метрики из другого шаблона или обязательная связь с ним. Ключ поддерживается
+    на любом хосте с агентом; это проверено на FreeBSD/pfSense. Штатные шаблоны ОС этот ключ не используют,
+    поэтому при привязке конфликтов нет.
+  'VPN: host agent silent on {HOST.NAME}': 'VPN: агент не передаёт данные на {HOST.NAME}'
+  agent variant={ITEM.LASTVALUE1} (1=agent, 2=agent2): тип агента={ITEM.LASTVALUE1} (1=agent, 2=agent2)
+  ? 'The host''s entire active-check channel is silent, not just this template''s UserParameters. Deliberately
+    not paged: where an OS or agent template is linked, its own "Zabbix agent is not available" trigger
+    owns this alert and a second page would duplicate it. The only job of this trigger is to be the parent
+    that suppresses "VPN: monitoring blind", which is why {$VPN.AGENT.WINDOW} must stay shorter than {$VPN.WATCHDOG.WINDOW}.
+    A host with no agent-availability template of its own has no owner for this alert - link the stock
+    "Zabbix agent active" template there; see docs/DEPLOY-POSTURE.md.'
+  : 'Данные не поступают по всему каналу активных проверок хоста, включая UserParameter этого шаблона.
+    Отдельное оповещение не предусмотрено: если привязан шаблон ОС или агента, за этот сбой отвечает его
+    триггер «Zabbix agent is not available», а повторное уведомление дублировало бы его. Этот триггер
+    подавляет «VPN: нет данных мониторинга» как родительская проблема. Поэтому {$VPN.AGENT.WINDOW} должно
+    быть короче {$VPN.WATCHDOG.WINDOW}. Если на хосте нет шаблона доступности агента, об этом сбое некому
+    оповестить. Привяжите штатный шаблон «Zabbix agent active»; см. docs/DEPLOY-POSTURE.md.'
+  'VPN monitoring heartbeat: WireGuard interface count': 'Контроль мониторинга VPN: число интерфейсов
+    WireGuard'
+  ? Count of WireGuard + AmneziaWG interfaces (the UserParameter unions both). A host without wg/awg returns
+    the valid value 0, so this backward-compatible key also serves as a shared Agent2 active-check/UserParameter
+    delivery heartbeat. It does not validate backend-specific discovery or probes. Explicit 1m cadence
+    keeps nodata({$VPN.WATCHDOG.WINDOW}) independent of global item defaults.
+  : Число интерфейсов WireGuard и AmneziaWG; UserParameter объединяет оба списка. Хост без wg/awg возвращает
+    допустимое значение 0. Поэтому совместимый с прежними версиями ключ также контролирует общую доставку
+    данных Agent2 через активные проверки и UserParameter. Он не проверяет отдельные правила обнаружения
+    или проверки VPN. Явный интервал 1m делает nodata({$VPN.WATCHDOG.WINDOW}) независимым от общих настроек
+    интервала метрик.
+  'VPN: monitoring blind on {HOST.NAME}': 'VPN: нет данных мониторинга на {HOST.NAME}'
+  last wg.count={ITEM.LASTVALUE1} (0 is valid): последнее wg.count={ITEM.LASTVALUE1} (0 допустим)
+  ? 'No wg.count value for {$VPN.WATCHDOG.WINDOW} while the agent itself is still delivering: this template''s
+    Agent2 active-check/UserParameter path is broken. A collected 0 is valid and keeps the delivery heartbeat
+    healthy; it does not prove that backend-specific discovery or probes work. Restore shared data delivery
+    before investigating dependent tunnel/posture alerts. A silent host is NOT this event: the agent-liveness
+    heartbeat goes quiet first and suppresses it, so whole-host silence stays with the owner of that alert.
+    Default nodata mode is intentional: it avoids a host-alert storm after a Zabbix proxy outage; monitor
+    proxy availability separately.'
+  : Значение wg.count не поступает в течение {$VPN.WATCHDOG.WINDOW}, хотя агент продолжает передавать
+    данные. Сломан канал активных проверок Agent2/UserParameter этого шаблона. Полученное значение 0 допустимо
+    и подтверждает доставку данных, но не работоспособность отдельных правил обнаружения или проверок
+    VPN. Восстановите общую доставку данных перед разбором зависимых событий туннелей и конфигурации.
+    При общей потере связи с хостом контроль доступности агента срабатывает раньше и подавляет этот триггер;
+    за оповещение отвечает шаблон доступности хоста. Режим nodata по умолчанию предотвращает массовые
+    события на хостах после отказа Zabbix proxy. Доступность прокси нужно контролировать отдельно.
+  'VPN: probe capability': 'VPN: работоспособность проверки PMTU'
+  ? 'Shared probe-health canary: 1 if the installed generic/WireGuard PMTU runners and generic UserParameter
+    are present and syntactically valid and ping can send a DF packet to loopback; otherwise 0. The backward-compatible
+    wg.probe.ok key is retained for existing history and dashboards.'
+  : 'Общий контроль механизма проверки PMTU: 1, если универсальный и совместимый с WireGuard скрипты установлены,
+    синтаксически корректны, общий UserParameter присутствует и ping отправляет пакет с DF на loopback;
+    иначе 0. Совместимый с прежними версиями ключ wg.probe.ok сохранён для существующей истории и дашбордов.'
+  Probe capability: Работоспособность проверки PMTU
+  'VPN: probe broken on {HOST.NAME}': 'VPN: проверка PMTU не работает на {HOST.NAME}'
+  probe canary={ITEM.LASTVALUE1} (1=ok, 0=broken): контроль проверки={ITEM.LASTVALUE1} (1=исправна, 0=сломана)
+  ? The shared PMTU runners/UserParameter are missing or invalid, ping cannot send DF packets, or this
+    canary alone stopped producing data while the delivery heartbeat remained fresh. Per-tunnel missing-data
+    expressions require a healthy canary and therefore close or stay quiet during this failure. The heartbeat
+    freshness guard prevents a silent host from being misreported as a probe fault; the monitoring-blind
+    watchdog remains the single parent event.
+  : Общие скрипты PMTU/UserParameter отсутствуют или некорректны, ping не отправляет пакеты с DF либо
+    перестали поступать только данные этого контрольного ключа, а данные контроля доставки остаются свежими.
+    Выражения отсутствия данных отдельных туннелей требуют исправного общего механизма проверки, поэтому
+    при таком сбое закрывают свои события или не создают их. Проверка свежести общего контроля доставки
+    исключает ошибочное сообщение о поломке PMTU при общей потере данных с хоста. Контроль потери данных
+    мониторинга остаётся единственным родительским событием.
+  WireGuard posture discovery: Обнаружение конфигурации WireGuard
+  ? Discovers WireGuard/AmneziaWG interfaces for the config-plane MTU/clamp posture check (no probing).
+    OpenVPN/ZeroTier are excluded — their MTU model differs (mssfix/fragment, ~2800).
+  : Обнаруживает интерфейсы WireGuard/AmneziaWG для проверки конфигурации MTU и ограничения MSS без отправки
+    пакетов. OpenVPN/ZeroTier исключены из-за другой модели MTU (mssfix/fragment, около 2800).
+  'WireGuard {#VPN_IFACE}: MTU': 'WireGuard {#VPN_IFACE}: MTU'
+  ? 'Configured MTU of the WireGuard interface (config-plane read). No units set on purpose: Zabbix 1024-prefixes
+    the "B" unit, so an MTU of 1420 would render as "1.39 KB" — we want the raw 1420. In this estate (WG
+    over an internet/Xray underlay) anything >= 1500 silently black-holes large/forwarded traffic — the
+    config that caused the proxy config-sync incident.'
+  : 'Настроенный MTU интерфейса WireGuard, прочитанный из конфигурации. Единицы намеренно не заданы: Zabbix
+    применяет к «B» двоичные приставки, и MTU 1420 отображался бы как «1.39 KB», хотя требуется исходное
+    число 1420. В сети, для которой создан шаблон (WG поверх интернета/Xray), значения >= 1500 приводят
+    к незаметным потерям крупных и транзитных пакетов. Такая конфигурация вызвала инцидент с синхронизацией
+    конфигурации прокси.'
+  'WireGuard {#VPN_IFACE}: MTU too high on {HOST.NAME}': 'WireGuard {#VPN_IFACE}: завышен MTU на {HOST.NAME}'
+  MTU {ITEM.LASTVALUE1} B (ceiling {$VPN.MTU.MAX}): MTU {ITEM.LASTVALUE1} B (предел {$VPN.MTU.MAX})
+  ? 'The WG interface MTU ({ITEM.LASTVALUE}) exceeds the safe ceiling {$VPN.MTU.MAX} for its underlay
+    -> large/forwarded packets silently black-hole. Lower the iface MTU (and add an MSS clamp). Config-plane
+    check: does not flap, immune to channel-down false positives. Hysteresis over {$VPN.HYST.WINDOW} avoids
+    a single bad read — time-based on purpose, since a count-based #2 collapses to one poll on hosts that
+    write duplicate samples.'
+  : 'MTU интерфейса WG ({ITEM.LASTVALUE}) превышает безопасный для нижележащей сети предел {$VPN.MTU.MAX},
+    из-за чего крупные и транзитные пакеты теряются без уведомления. Уменьшите MTU интерфейса и добавьте
+    ограничение MSS. Проверка читает конфигурацию, поэтому не меняет состояние при колебаниях доступности
+    канала и не принимает его отказ за ошибку MTU. Окно {$VPN.HYST.WINDOW} защищает от одного ошибочного
+    чтения. Оно задано временем: проверка последних #2 значений на хостах с дублированием записей охватывала
+    бы один опрос.'
+  'WireGuard {#VPN_IFACE}: forwards transit': 'WireGuard {#VPN_IFACE}: передаёт транзитный трафик'
+  ? 1 if this host forwards transit through the interface (ip_forward/gateway + a routed prefix in allowed-ips/routes),
+    else 0. Gates the missing-clamp note so it only evaluates on forwarding gateways.
+  : 1, если хост пересылает транзитный трафик через интерфейс (ip_forward/gateway и маршрутизируемый префикс
+    в allowed-ips/routes); иначе 0. Ограничивает проверку отсутствия ограничения MSS только шлюзами, которые
+    пересылают трафик.
+  VPN posture flag: Флаг конфигурации VPN
+  'WireGuard {#VPN_IFACE}: MSS clamp present': 'WireGuard {#VPN_IFACE}: настроено ограничение MSS'
+  ? 1 if an MSS clamp (pf max-mss / iptables TCPMSS / nft maxseg) covers the interface, else 0. Defense-in-depth
+    for forwarded TCP.
+  : 1, если ограничение MSS (pf max-mss / iptables TCPMSS / nft maxseg) охватывает интерфейс; иначе 0.
+    Это дополнительная защита транзитного TCP.
+  'WireGuard {#VPN_IFACE}: forwards transit without MSS clamp on {HOST.NAME}': 'WireGuard {#VPN_IFACE}:
+    транзитный трафик без ограничения MSS на {HOST.NAME}'
+  forwards={ITEM.LASTVALUE1}, clamp={ITEM.LASTVALUE2}: транзит={ITEM.LASTVALUE1}, ограничение MSS={ITEM.LASTVALUE2}
+  ? 'Defense-in-depth gap: a gateway forwarding TCP through this tunnel has no MSS clamp. Harmless while
+    the MTU is correct (PMTUD covers it); becomes a silent black hole if the MTU is ever too high or PMTUD
+    breaks (asymmetric routing). Information only — not paged. Suppressed when the MTU-too-high warning
+    fires on the same iface.'
+  : Шлюз пересылает TCP через туннель без дополнительной защиты ограничением MSS. При правильном MTU это
+    допустимо, поскольку работает PMTUD. При завышении MTU или отказе PMTUD, например из-за асимметричной
+    маршрутизации, возможны незаметные потери пакетов. Событие информационное, без отдельного оповещения.
+    Подавляется предупреждением о завышенном MTU на том же интерфейсе.
+  OpenVPN probe-target discovery: Обнаружение целей проверки OpenVPN
+  'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU gap': 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: разница
+    PMTU'
+  ? Generic probe (OpenVPN). -2 offline (data-only), -1 live but no ICMP (e.g. an OpenVPN-AS client with
+    host firewall — common), 0 healthy, >0 = MTU black-hole gap (bytes). {#VPN_DYNAMIC}=1 marks a roaming
+    Access Server client; its data is retained but paging is disabled by {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}.
+    Key uses literal 'openvpn' (not {#VPN_TECH}) because Zabbix requires unique prototype keys per template
+    and zerotier's rule owns the {#VPN_TECH} form.
+  : 'Универсальная проверка для OpenVPN. -2 — туннель отключён, только данные; -1 — туннель работает,
+    но ICMP не отвечает, что часто бывает у клиентов OpenVPN-AS с локальным межсетевым экраном; 0 — исправен;
+    >0 — разница MTU в байтах при потере крупных пакетов. {#VPN_DYNAMIC}=1 обозначает перемещающегося
+    клиента Access Server. Его данные сохраняются, но оповещения отключены через {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}.
+    В ключе используется литерал ''openvpn'' вместо {#VPN_TECH}: Zabbix требует уникальных ключей прототипов
+    в шаблоне, а форму с {#VPN_TECH} уже использует правило zerotier.'
+  VPN PMTU probe state: Состояние проверки PMTU VPN
+  'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole': 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}:
+    потеря крупных пакетов из-за MTU'
+  gap {ITEM.LASTVALUE} B: разница {ITEM.LASTVALUE} B
+  ? Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path. (mssfix
+    only protects TCP; a >0 here means non-TCP/UDP traffic black-holes.)
+  : Маленькие пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля или исправьте путь.
+    mssfix защищает только TCP; значение >0 здесь означает потери трафика вне TCP, включая UDP.
+  'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}': 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}:
+    нет данных PMTU на {HOST.NAME}'
+  ? No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1,
+    so this reports a blind probe path, not tunnel reachability. The discovery rule disables vanished
+    OpenVPN clients immediately. Inline heartbeat/canary health guards prevent opening during a shared
+    failure and close an already-open event if a shared failure begins later.
+  : Метрика PMTU этой цели не поступает в течение {$VPN.PROBE.NODATA}. Отключённые цели и цели, которые
+    не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает потерю данных проверки.
+    Доступность туннеля оно не определяет. Правило обнаружения сразу отключает исчезнувших клиентов OpenVPN.
+    Проверки состояния общей доставки данных и общего механизма PMTU внутри выражения предотвращают событие
+    при общем сбое и закрывают уже открытое событие, если общий сбой начинается позже.
+  'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable': 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}:
+    цель проверки недоступна'
+  ? 'DATA-ONLY (disabled): a sustained -1 = live tunnel whose target stops answering ICMP. OpenVPN-AS
+    clients are commonly ICMP-dark (host firewall), so this is expected and not paged.'
+  : Только данные, триггер отключён. Устойчивое -1 означает работающий туннель, цель которого не отвечает
+    на ICMP. У клиентов OpenVPN-AS локальный межсетевой экран часто блокирует ICMP; это ожидаемо и не
+    вызывает оповещений.
+  WireGuard probe-target discovery: Обнаружение целей проверки WireGuard
+  'WireGuard {#WG_IFACE}->{#WG_TARGET}: PMTU gap': 'WireGuard {#WG_IFACE}->{#WG_TARGET}: разница PMTU'
+  ? '-2 offline (no/stale WireGuard handshake; data-only, not paged), -1 live tunnel but no ICMP reply,
+    0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes). Carries both wg_iface
+    (historical, kept so existing filters/dashboards keep working) and vpn_iface, the cross-technology
+    tag the posture items and the OpenVPN/ZeroTier probes use — without it no single filter collects everything
+    about one interface. No vpn_tech tag on purpose: wg.discovery unions WireGuard and AmneziaWG (wg_discovery.sh:
+    `wg show interfaces` + `awg show interfaces`), so a literal "wireguard" here would mislabel every
+    awg tunnel.'
+  : '-2 — туннель отключён из-за отсутствующего или устаревшего handshake WireGuard, только данные без
+    оповещения; -1 — туннель работает, но ICMP не отвечает; 0 — исправен; >0 — настроенный MTU минус максимальный
+    доставляемый размер, то есть разница в байтах при потере крупных пакетов. Метрика содержит тег wg_iface
+    для совместимости с существующими фильтрами и дашбордами, а также общий для технологий тег vpn_iface,
+    который используют проверки конфигурации и OpenVPN/ZeroTier. Этот тег объединяет сведения об одном
+    интерфейсе в одном фильтре. Тег vpn_tech не задан, поскольку wg.discovery объединяет WireGuard и AmneziaWG
+    (wg_discovery.sh: `wg show interfaces` + `awg show interfaces`). Литерал «wireguard» ошибочно помечал
+    бы все туннели awg.'
+  'WireGuard {#WG_IFACE}->{#WG_TARGET}: MTU black hole': 'WireGuard {#WG_IFACE}->{#WG_TARGET}: потеря
+    крупных пакетов из-за MTU'
+  Small packets deliver but at-MTU packets are dropped — lower tunnel MTU or fix the path.: Маленькие
+    пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля или исправьте путь.
+  'WireGuard {#WG_IFACE}->{#WG_TARGET}: PMTU data missing on {HOST.NAME}': 'WireGuard {#WG_IFACE}->{#WG_TARGET}:
+    нет данных PMTU на {HOST.NAME}'
+  ? No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark peers still return -2/-1,
+    so this reports a blind probe path, not peer reachability. Inline heartbeat/canary health guards prevent
+    opening during a shared failure and close an already-open event if a shared failure begins later.
+  : Метрика PMTU этого узла не поступает в течение {$VPN.PROBE.NODATA}. Отключённые узлы и узлы, которые
+    не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает потерю данных проверки.
+    Доступность узла оно не определяет. Проверки состояния общей доставки данных и общего механизма PMTU
+    внутри выражения предотвращают событие при общем сбое и закрывают уже открытое событие, если общий
+    сбой начинается позже.
+  'WireGuard {#WG_IFACE}->{#WG_TARGET}: probe target unreachable': 'WireGuard {#WG_IFACE}->{#WG_TARGET}:
+    цель проверки недоступна'
+  ? 'DATA-ONLY (disabled): liveness cannot be paged without false positives on roaming/mobile peers. Offline
+    peers report -2 (handshake gate); a sustained -1 means a live tunnel whose target stopped answering
+    ICMP. Re-enable per-peer only with an explicit opt-in gate if precise dead-peer paging is wanted.'
+  : Только данные, триггер отключён. Оповещения о доступности дают ложные срабатывания для перемещающихся
+    и мобильных узлов. Отключённые узлы возвращают -2 по результату проверки handshake; устойчивое -1
+    означает работающий туннель, цель которого перестала отвечать на ICMP. Если нужны точные оповещения
+    об отключении узла, включайте их для отдельных узлов только через явное разрешающее условие.
+  ZeroTier probe-target discovery: Обнаружение целей проверки ZeroTier
+  'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: PMTU gap': 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}:
+    разница PMTU'
+  ? Generic probe shared by non-WireGuard backends. -2 offline (data-only, not paged), -1 live tunnel
+    but no ICMP reply, 0 healthy, >0 = configured MTU minus max-deliverable (black-hole gap, bytes).
+  : Универсальная проверка для технологий, отличных от WireGuard. -2 — туннель отключён, только данные
+    без оповещения; -1 — туннель работает, но ICMP не отвечает; 0 — исправен; >0 — настроенный MTU минус
+    максимальный доставляемый размер, то есть разница в байтах при потере крупных пакетов.
+  'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: MTU black hole': 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}:
+    потеря крупных пакетов из-за MTU'
+  Small packets deliver but at-MTU packets are dropped — lower the tunnel MTU or fix the path.: Маленькие
+    пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля или исправьте путь.
+  'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: PMTU data missing on {HOST.NAME}': 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}:
+    нет данных PMTU на {HOST.NAME}'
+  ? No value from this PMTU item for {$VPN.PROBE.NODATA}. Offline and ICMP-dark targets still return -2/-1,
+    so this reports a blind probe path, not tunnel reachability. Inline heartbeat/canary health guards
+    prevent opening during a shared failure and close an already-open event if a shared failure begins
+    later.
+  : Метрика PMTU этой цели не поступает в течение {$VPN.PROBE.NODATA}. Отключённые цели и цели, которые
+    не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает потерю данных проверки.
+    Доступность туннеля оно не определяет. Проверки состояния общей доставки данных и общего механизма
+    PMTU внутри выражения предотвращают событие при общем сбое и закрывают уже открытое событие, если
+    общий сбой начинается позже.
+  'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: probe target unreachable': 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}:
+    цель проверки недоступна'
+  ? 'DATA-ONLY (disabled): liveness is not paged (false positives on roaming peers). Offline reports -2;
+    a sustained -1 means a live tunnel whose target stopped answering ICMP.'
+  : Только данные, триггер отключён. Оповещения о доступности не отправляются из-за ложных срабатываний
+    для перемещающихся узлов. Отключённый туннель возвращает -2; устойчивое -1 означает работающий туннель,
+    цель которого перестала отвечать на ICMP.
+  ? Per-endpoint paging switch resolved by the {#VPN_DYNAMIC} LLD macro. Static/community OpenVPN rows
+    use 0 and page; Access Server roaming clients use 1 and remain data-only. Set the contextual value
+    back to 1 only when dynamic client PMTU alerts are operationally required.
+  : Переключатель оповещений для отдельных целей с контекстом по макросу LLD {#VPN_DYNAMIC}. Статические
+    цели OpenVPN Community используют 0 и вызывают оповещения; перемещающиеся клиенты Access Server используют
+    1 и сохраняются только как данные. Возвращайте контекстное значение в 1, только если оповещения PMTU
+    для динамических клиентов нужны в эксплуатации.
+  ? 'Default context: suppress paging for dynamic Access Server clients while retaining item history and
+    the vpn_dynamic=1 event tag.'
+  : Контекст по умолчанию отключает оповещения для динамических клиентов Access Server и сохраняет историю
+    метрик и тег событий vpn_dynamic=1.
+  ? Safe MTU ceiling for WireGuard tunnels over an internet/Xray underlay. The posture check pages (Warning)
+    when an iface MTU exceeds this. Override per host/context where a tunnel needs a lower value (e.g.
+    a relay host -> 1340). Sub-ceiling asymmetry (1400 where 1340 is needed) is out of scope — needs cross-host
+    comparison.
+  : Безопасный предел MTU для туннелей WireGuard поверх интернета/Xray. Проверка конфигурации оповещает
+    с уровнем «Предупреждение» при превышении MTU интерфейса. Переопределите значение на хосте/в контексте,
+    если туннелю нужен меньший MTU, например 1340 на промежуточном хосте. Асимметрия ниже порога, например
+    1400 там, где требуется 1340, не обнаруживается; для неё нужно сравнивать хосты.
+  ? 'No-data window for the monitoring-blind watchdog: if the 1m wg.count heartbeat yields nothing for
+    this long, delivery through that Agent2 active-check/UserParameter path is assumed broken and dependent
+    tunnel/posture alerts are suppressed. The value 0 is valid on hosts without wg/awg, so the delivery
+    heartbeat also works on OpenVPN/ZeroTier-only hosts; it is not a healthcheck for their discovery or
+    probe keys. Default nodata mode is proxy-aware; monitor proxy availability separately. Referenced
+    by the watchdog trigger and every dependency on it. Override per host only when its effective active-check
+    cadence requires a longer window.'
+  : Окно отсутствия данных для контроля потери мониторинга. Если wg.count с интервалом 1m не поступает
+    в течение этого времени, доставка через активные проверки Agent2/UserParameter считается неисправной,
+    а зависимые события туннелей и конфигурации подавляются. Значение 0 допустимо на хостах без wg/awg,
+    поэтому этот контроль работает и на хостах только с OpenVPN/ZeroTier. Он не проверяет их ключи обнаружения
+    или PMTU. Режим nodata по умолчанию учитывает доступность прокси; её нужно контролировать отдельно.
+    Макрос используется в триггере контроля доставки и всех зависимостях от него. Увеличивайте значение
+    на хосте, только если этого требует его фактический интервал активных проверок.
+  ? 'No-data window for the agent-liveness heartbeat (agent.variant, 1m). Below it the whole active-check
+    channel counts as silent and "VPN: monitoring blind" is suppressed, because whole-host silence belongs
+    to the host''s own agent-availability alert, not to this template. MUST stay shorter than {$VPN.WATCHDOG.WINDOW}
+    - the parent has to reach PROBLEM before the child would open, and Zabbix dependencies never suppress
+    an event that is already open. The 15m default is half the 30m watchdog. Raise both together, never
+    one alone.'
+  : 'Окно отсутствия данных для контроля доступности агента (agent.variant, 1m). После этого времени весь
+    канал активных проверок считается недоступным, а «VPN: нет данных мониторинга» подавляется. За общую
+    потерю связи отвечает собственное оповещение хоста о доступности агента. Окно должно быть короче {$VPN.WATCHDOG.WINDOW},
+    чтобы родитель успел перейти в PROBLEM до срабатывания дочернего триггера. Зависимости Zabbix не подавляют
+    уже открытое событие. Значение по умолчанию 15m вдвое меньше 30m у контроля доставки. Увеличивайте
+    оба окна вместе.'
+  ? 'Hysteresis window: a trigger only fires if EVERY sample in this window agrees AND at least two samples
+    are present (each guarded expression carries an explicit `count(...)>1` floor). The count floor is
+    load-bearing, not belt-and-braces: a time window holds a time span, NOT a sample count, so after a
+    collection gap longer than the window the window holds exactly one fresh sample and min()/max() would
+    fire on that single reading — the very "one bad read pages" failure this macro exists to prevent.
+    The watchdog does not cover it either: it keys on wg.count, so a stall in one guarded item while wg.count
+    keeps flowing never trips it. Known residual limit (verified on the live server): count() counts VALUES,
+    not polls, so on a duplicate-sample host one poll already satisfies >1 — a collection gap longer than
+    the window followed by a single duplicate-writing poll can still page off that one poll. That is no
+    worse than the pre-1.2.0 count-based form behaved on the same hosts, and it needs both conditions
+    at once; closing it would require counting distinct timestamps, which Zabbix trigger functions cannot
+    express. Deliberately time-based, not count-based (#N): a host whose agent writes the same value twice
+    per poll — proxy-group / dual-ServerActive setups do — makes #2 span a single poll, silently disabling
+    the hysteresis. A window cannot be defeated that way. Keep it >2x the longest poll interval among
+    the items it guards ({$VPN.PROBE.INTERVAL} and the fixed 10m posture cadence); the 25m default covers
+    both. Side effect: the probe-capability canary (wg.probe.ok, 5m) needs the full window too, so a lost
+    cap_net_raw is confirmed in ~25m rather than ~10m — still well inside {$VPN.WATCHDOG.WINDOW}.'
+  : 'Окно гистерезиса. Триггер срабатывает, только если все значения в окне подтверждают проблему и получено
+    не меньше двух значений: каждое защищённое выражение содержит `count(...)>1`. Ограничение числа значений
+    необходимо, поскольку окно задаёт время, а не количество записей. После перерыва сбора длиннее окна
+    в нём остаётся одно новое значение, и min()/max() без ограничения сработали бы по одному ошибочному
+    чтению. Контроль wg.count этого не обнаружит, если остановилась только одна метрика, а wg.count продолжает
+    поступать.
+
+
+    Известное ограничение, проверенное на рабочем сервере: count() считает значения, а не опросы. Если
+    хост дублирует записи, один опрос уже удовлетворяет >1. Поэтому после перерыва длиннее окна один опрос
+    с дублирующей записью всё ещё может вызвать оповещение. Для этого должны совпасть оба условия; поведение
+    не хуже, чем у проверки числа значений до версии 1.2.0 на тех же хостах. Для устранения ограничения
+    потребовался бы подсчёт уникальных временных меток, которого нет в функциях триггеров Zabbix.
+
+
+    Окно задано временем, а не числом записей (#N). При двойной записи значения за опрос, например при
+    proxy-group или двух ServerActive, #2 охватывает один опрос и отключает гистерезис. Временное окно
+    от дублирования не сокращается. Держите его длиннее удвоенного наибольшего интервала защищённых метрик:
+    {$VPN.PROBE.INTERVAL} и фиксированных 10m для конфигурации. Значение по умолчанию 25m покрывает оба
+    интервала. Общий контроль проверки wg.probe.ok с интервалом 5m также требует полного окна, поэтому
+    потеря cap_net_raw подтверждается примерно за 25m вместо 10m, раньше {$VPN.WATCHDOG.WINDOW}.'
+  ? 'Poll interval for the active per-tunnel PMTU probe items (wg.pmtu/vpn.pmtu). Each probe does two
+    key-free `wg show` reads via NOPASSWD sudo; an MTU black hole is a config-stable event, so 10m is
+    ample and roughly halves the agent''s sudo rate vs the old 5m (host security tooling alerts on service-account
+    sudo volume). Lower only if you need faster black-hole detection. RAISING this per host requires raising
+    {$VPN.HYST.WINDOW} on the same host to >=2x the new value (>12m30s at the 25m default leaves one sample
+    in the window and silently disables the hysteresis — the very defect {$VPN.HYST.WINDOW} exists to
+    prevent). No static check can catch that: the test only sees template defaults, never per-host overrides.'
+  : 'Интервал активных проверок PMTU отдельных туннелей (wg.pmtu/vpn.pmtu). Каждая проверка дважды читает
+    `wg show` через NOPASSWD sudo, не получая ключи. Ошибка MTU определяется устойчивой конфигурацией,
+    поэтому интервала 10m достаточно. По сравнению с прежними 5m число вызовов sudo агентом уменьшается
+    примерно вдвое; средства безопасности хоста могут оповещать о числе вызовов sudo служебной учётной
+    записью. Уменьшайте интервал, если нужно быстрее обнаруживать проблему MTU. При увеличении интервала
+    на хосте увеличьте и {$VPN.HYST.WINDOW} на том же хосте как минимум вдвое относительно нового интервала.
+    При интервале >12m30s окно 25m оставляет одно значение и отключает гистерезис, от чего защищает {$VPN.HYST.WINDOW}.
+    Статическая проверка этого не обнаружит: тест видит значения шаблона по умолчанию, но не переопределения
+    на хостах.'
+  ? Per-target PMTU no-data window. It must remain longer than {$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL};
+    the 45m default gives the 30m shared delivery watchdog time to become the single parent problem before
+    a child probe is declared blind. Offline and ICMP-dark targets keep returning -2/-1 and therefore
+    never trip this check. Default nodata mode stays proxy-aware to avoid an event fan-out after proxy
+    outages. Raise this macro together with any longer watchdog/probe interval.
+  : Окно отсутствия данных PMTU отдельной цели. Оно должно быть длиннее {$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}.
+    Значение по умолчанию 45m даёт общему контролю доставки с окном 30m время сформировать единственную
+    родительскую проблему до события потери данных дочерней проверки. Отключённые цели и цели без ICMP
+    продолжают возвращать -2/-1, поэтому этот контроль на них не срабатывает. Режим nodata по умолчанию
+    учитывает доступность прокси и предотвращает множество событий после его отказа. Увеличивайте макрос
+    вместе с увеличением окна контроля доставки или интервала проверки.
+  ? Per-iface probe-target overrides for non-WireGuard tunnels (OpenVPN/ZeroTier). Comma-separated iface=ip
+    list, e.g. "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Read by the per-tech discovery LLD keys; ifaces
+    are unique across techs.
+  : Переопределения целей проверки по интерфейсам для туннелей OpenVPN/ZeroTier. Список iface=ip через
+    запятую, например "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Передаётся в ключи LLD обнаружения соответствующей
+    технологии. Имена интерфейсов уникальны между технологиями.
+  ? Per-iface probe-target overrides for tunnels with no /32 route (subnet/0.0.0.0/0). Comma-separated
+    iface=ip list, e.g. "wg0=192.0.2.3,wgX=10.0.0.1". Passed into the wg.discovery LLD key; an iface with
+    neither a /32 route nor an override is left unprobed (no false alert).
+  : Переопределения целей проверки по интерфейсам для туннелей без маршрута /32 (подсеть/0.0.0.0/0). Список
+    iface=ip через запятую, например "wg0=192.0.2.3,wgX=10.0.0.1". Передаётся в ключ LLD wg.discovery.
+    Интерфейс без маршрута /32 и без переопределения остаётся без проверки, чтобы не создавать ложное
+    событие.
+  'no': нет
+  'yes': да
+  broken (shared probe unavailable): неисправна (общая проверка недоступна)
+  ok: исправна
+  offline (no handshake): отключён (нет handshake)
+  unreachable (live, no ICMP): недоступен (туннель работает, ICMP не отвечает)
+  healthy (no MTU gap): исправен (разницы MTU нет)

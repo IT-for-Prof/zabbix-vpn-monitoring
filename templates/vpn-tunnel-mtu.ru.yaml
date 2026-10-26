@@ -1,0 +1,646 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+  - uuid: 55d204abe0194f81b872859ef4d95fb1
+    name: Templates/Custom
+  templates:
+  - uuid: dc2bc7d4c5464c189089ee40a7fee329
+    template: VPN Tunnel MTU by Zabbix agent RU
+    name: Мониторинг MTU VPN через агент Zabbix
+    description: 'Мониторинг MTU туннелей WireGuard/VPN. Дифференциальная проверка ICMP с флагом DF обнаруживает
+      потери крупных пакетов из-за MTU в отдельных туннелях. Проверка handshake отмечает узлы WireGuard
+      с отсутствующим или устаревшим handshake как отключённые (-2, только данные), чтобы перемещения
+      мобильных клиентов не вызывали ложных оповещений. Проверка конфигурации сравнивает MTU интерфейса
+      с {$VPN.MTU.MAX} и проверяет наличие ограничения MSS. Она только читает sysfs и правила фильтрации,
+      не отправляет пакеты, обнаруживает неверный MTU при отключённом туннеле и не принимает отказ канала
+      за ошибку MTU. Шаблон также контролирует поступление wg.count и работоспособность механизма проверки
+      PMTU.
+
+
+      Дополнительный встроенный ключ agent.variant контролирует канал активных проверок без UserParameter.
+      При потере всего канала данные этого ключа перестают поступать раньше, чем срабатывает контроль
+      wg.count, и подавляют его. Об общей потере связи с агентом сообщает шаблон доступности агента на
+      хосте; этот шаблон оповещает только о сбое сбора данных VPN. Используются активные проверки агента.
+      Для ping требуется cap_net_raw, для чтения возраста handshake — узкие правила sudoers на wg show
+      allowed-ips/latest-handshakes, не раскрывающие ключи. Цель проверки берётся из маршрута /32 к узлу;
+      для каждого интерфейса её можно переопределить через {$WG.PROBE.TARGETS}.
+
+
+      Четыре правила обнаружения охватывают конфигурацию WireGuard/AmneziaWG и цели проверок WireGuard/AmneziaWG,
+      OpenVPN и ZeroTier. Сама проверка не зависит от технологии VPN. Проверка конфигурации применяется
+      только к WireGuard: у OpenVPN/ZeroTier другая модель MTU с mssfix/fragment и значениями около 2800,
+      где предел 1420 давал бы ложные срабатывания.
+
+
+      Совместимый с прежними версиями ключ wg.count контролирует общую доставку данных Agent2 через активные
+      проверки и UserParameter на всех хостах с мониторингом, установленным через installers/install.sh.
+      Если wg/awg отсутствуют, числовой 0 допустим; отсутствие значения означает потерю наблюдения за
+      этим каналом сбора. Этот контроль не подтверждает работоспособность каждого отдельного правила обнаружения
+      или проверки VPN. Режим nodata по умолчанию учитывает доступность прокси. Доступность Zabbix server/proxy
+      нужно контролировать отдельно.
+
+
+      Author:  Konstantin Tyutyunnik / Константин Тютюнник
+
+      Site:    https://itforprof.com
+
+      Repo:    https://github.com/IT-for-Prof/zabbix-vpn-monitoring
+
+      License: MIT (c) 2026 Konstantin Tyutyunnik
+
+      '
+    vendor:
+      name: itforprof.com
+      version: 1.4.0
+    groups:
+    - name: Templates/Custom
+    items:
+    - uuid: 2cbf7508c91245ddaff21ef3d24d0f59
+      name: 'Контроль мониторинга VPN: доступность агента Zabbix'
+      type: ZABBIX_ACTIVE
+      key: agent.variant
+      delay: 1m
+      description: Встроенный ключ агента (1 = Zabbix agent, 2 = Zabbix agent 2) дополнительно контролирует
+        тот же канал активных проверок без UserParameter. Он различает два сбоя, которые wg.count сам
+        не различает. Если данные не поступают и здесь, недоступен весь канал активных проверок; об этом
+        уже оповещает шаблон ОС/агента на хосте. Если этот ключ поступает, а wg.count отсутствует, сломаны
+        UserParameter этого шаблона; для такого случая предусмотрен контроль потери данных VPN. Используется
+        встроенный ключ агента, поэтому не нужна вычисляемая копия метрики из другого шаблона или обязательная
+        связь с ним. Ключ поддерживается на любом хосте с агентом; это проверено на FreeBSD/pfSense. Штатные
+        шаблоны ОС этот ключ не используют, поэтому при привязке конфликтов нет.
+      tags:
+      - tag: scope
+        value: availability
+      triggers:
+      - uuid: 48b8fedcdbf444ffa5f4000eb1d6d11b
+        expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/agent.variant,{$VPN.AGENT.WINDOW})=1
+        name: 'VPN: агент не передаёт данные на {HOST.NAME}'
+        opdata: тип агента={ITEM.LASTVALUE1} (1=agent, 2=agent2)
+        priority: NOT_CLASSIFIED
+        description: 'Данные не поступают по всему каналу активных проверок хоста, включая UserParameter
+          этого шаблона. Отдельное оповещение не предусмотрено: если привязан шаблон ОС или агента, за
+          этот сбой отвечает его триггер «Zabbix agent is not available», а повторное уведомление дублировало
+          бы его. Этот триггер подавляет «VPN: нет данных мониторинга» как родительская проблема. Поэтому
+          {$VPN.AGENT.WINDOW} должно быть короче {$VPN.WATCHDOG.WINDOW}. Если на хосте нет шаблона доступности
+          агента, об этом сбое некому оповестить. Привяжите штатный шаблон «Zabbix agent active»; см.
+          docs/DEPLOY-POSTURE.md.'
+        tags:
+        - tag: scope
+          value: availability
+    - uuid: ae3bdb2d042340658ccda379bf7779ed
+      name: 'Контроль мониторинга VPN: число интерфейсов WireGuard'
+      type: ZABBIX_ACTIVE
+      key: wg.count
+      delay: 1m
+      description: Число интерфейсов WireGuard и AmneziaWG; UserParameter объединяет оба списка. Хост
+        без wg/awg возвращает допустимое значение 0. Поэтому совместимый с прежними версиями ключ также
+        контролирует общую доставку данных Agent2 через активные проверки и UserParameter. Он не проверяет
+        отдельные правила обнаружения или проверки VPN. Явный интервал 1m делает nodata({$VPN.WATCHDOG.WINDOW})
+        независимым от общих настроек интервала метрик.
+      tags:
+      - tag: component
+        value: wireguard
+      triggers:
+      - uuid: 5242a3f084a44295adaf5c78565bebdd
+        expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+        name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+        opdata: последнее wg.count={ITEM.LASTVALUE1} (0 допустим)
+        priority: AVERAGE
+        description: Значение wg.count не поступает в течение {$VPN.WATCHDOG.WINDOW}, хотя агент продолжает
+          передавать данные. Сломан канал активных проверок Agent2/UserParameter этого шаблона. Полученное
+          значение 0 допустимо и подтверждает доставку данных, но не работоспособность отдельных правил
+          обнаружения или проверок VPN. Восстановите общую доставку данных перед разбором зависимых событий
+          туннелей и конфигурации. При общей потере связи с хостом контроль доступности агента срабатывает
+          раньше и подавляет этот триггер; за оповещение отвечает шаблон доступности хоста. Режим nodata
+          по умолчанию предотвращает массовые события на хостах после отказа Zabbix proxy. Доступность
+          прокси нужно контролировать отдельно.
+        dependencies:
+        - name: 'VPN: агент не передаёт данные на {HOST.NAME}'
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/agent.variant,{$VPN.AGENT.WINDOW})=1
+        tags:
+        - tag: scope
+          value: availability
+    - uuid: c444b8fb6f25495daca8969b678bdb94
+      name: 'VPN: работоспособность проверки PMTU'
+      type: ZABBIX_ACTIVE
+      key: wg.probe.ok
+      delay: 5m
+      description: 'Общий контроль механизма проверки PMTU: 1, если универсальный и совместимый с WireGuard
+        скрипты установлены, синтаксически корректны, общий UserParameter присутствует и ping отправляет
+        пакет с DF на loopback; иначе 0. Совместимый с прежними версиями ключ wg.probe.ok сохранён для
+        существующей истории и дашбордов.'
+      valuemap:
+        name: Работоспособность проверки PMTU
+      tags:
+      - tag: component
+        value: wireguard
+      - tag: scope
+        value: probe
+      triggers:
+      - uuid: 59164a14d421419080706f29e5ccca00
+        expression: (nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN
+          Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN Tunnel MTU by
+          Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU by Zabbix agent
+          RU/wg.probe.ok,{$VPN.HYST.WINDOW})>1)
+        name: 'VPN: проверка PMTU не работает на {HOST.NAME}'
+        opdata: контроль проверки={ITEM.LASTVALUE1} (1=исправна, 0=сломана)
+        priority: AVERAGE
+        description: Общие скрипты PMTU/UserParameter отсутствуют или некорректны, ping не отправляет
+          пакеты с DF либо перестали поступать только данные этого контрольного ключа, а данные контроля
+          доставки остаются свежими. Выражения отсутствия данных отдельных туннелей требуют исправного
+          общего механизма проверки, поэтому при таком сбое закрывают свои события или не создают их.
+          Проверка свежести общего контроля доставки исключает ошибочное сообщение о поломке PMTU при
+          общей потере данных с хоста. Контроль потери данных мониторинга остаётся единственным родительским
+          событием.
+        dependencies:
+        - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+        tags:
+        - tag: scope
+          value: probe
+    discovery_rules:
+    - uuid: 7e42728e14d74ffa9535cb4124507751
+      name: Обнаружение конфигурации WireGuard
+      type: ZABBIX_ACTIVE
+      key: vpn.posture.discovery
+      delay: 10m
+      description: Обнаруживает интерфейсы WireGuard/AmneziaWG для проверки конфигурации MTU и ограничения
+        MSS без отправки пакетов. OpenVPN/ZeroTier исключены из-за другой модели MTU (mssfix/fragment,
+        около 2800).
+      item_prototypes:
+      - uuid: 76d0aeab964a4470bb50f2449ad7f28c
+        name: 'WireGuard {#VPN_IFACE}: MTU'
+        type: ZABBIX_ACTIVE
+        key: vpn.posture.mtu[{#VPN_IFACE}]
+        delay: 10m
+        value_type: UNSIGNED
+        description: 'Настроенный MTU интерфейса WireGuard, прочитанный из конфигурации. Единицы намеренно
+          не заданы: Zabbix применяет к «B» двоичные приставки, и MTU 1420 отображался бы как «1.39 KB»,
+          хотя требуется исходное число 1420. В сети, для которой создан шаблон (WG поверх интернета/Xray),
+          значения >= 1500 приводят к незаметным потерям крупных и транзитных пакетов. Такая конфигурация
+          вызвала инцидент с синхронизацией конфигурации прокси.'
+        tags:
+        - tag: scope
+          value: mtu-posture
+        - tag: vpn_iface
+          value: '{#VPN_IFACE}'
+        trigger_prototypes:
+        - uuid: a1609a90fabf4ffe944df58759431be5
+          expression: min(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>{$VPN.MTU.MAX}
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1
+          name: 'WireGuard {#VPN_IFACE}: завышен MTU на {HOST.NAME}'
+          opdata: MTU {ITEM.LASTVALUE1} B (предел {$VPN.MTU.MAX})
+          priority: WARNING
+          description: 'MTU интерфейса WG ({ITEM.LASTVALUE}) превышает безопасный для нижележащей сети
+            предел {$VPN.MTU.MAX}, из-за чего крупные и транзитные пакеты теряются без уведомления. Уменьшите
+            MTU интерфейса и добавьте ограничение MSS. Проверка читает конфигурацию, поэтому не меняет
+            состояние при колебаниях доступности канала и не принимает его отказ за ошибку MTU. Окно {$VPN.HYST.WINDOW}
+            защищает от одного ошибочного чтения. Оно задано временем: проверка последних #2 значений
+            на хостах с дублированием записей охватывала бы один опрос.'
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          tags:
+          - tag: scope
+            value: mtu-posture
+      - uuid: 2f4c5efe53504361b693b4a5d42242d9
+        name: 'WireGuard {#VPN_IFACE}: передаёт транзитный трафик'
+        type: ZABBIX_ACTIVE
+        key: vpn.posture.fwd[{#VPN_IFACE}]
+        delay: 10m
+        value_type: UNSIGNED
+        description: 1, если хост пересылает транзитный трафик через интерфейс (ip_forward/gateway и маршрутизируемый
+          префикс в allowed-ips/routes); иначе 0. Ограничивает проверку отсутствия ограничения MSS только
+          шлюзами, которые пересылают трафик.
+        valuemap:
+          name: Флаг конфигурации VPN
+        tags:
+        - tag: scope
+          value: mtu-posture
+        - tag: vpn_iface
+          value: '{#VPN_IFACE}'
+      - uuid: f578746a633c45d1a3e956cb0e5e8e7f
+        name: 'WireGuard {#VPN_IFACE}: настроено ограничение MSS'
+        type: ZABBIX_ACTIVE
+        key: vpn.posture.clamp[{#VPN_IFACE}]
+        delay: 10m
+        value_type: UNSIGNED
+        description: 1, если ограничение MSS (pf max-mss / iptables TCPMSS / nft maxseg) охватывает интерфейс;
+          иначе 0. Это дополнительная защита транзитного TCP.
+        valuemap:
+          name: Флаг конфигурации VPN
+        tags:
+        - tag: scope
+          value: mtu-posture
+        - tag: vpn_iface
+          value: '{#VPN_IFACE}'
+        trigger_prototypes:
+        - uuid: 85572cb9a8634372b8dc8763c8e958e6
+          expression: min(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.fwd[{#VPN_IFACE}],{$VPN.HYST.WINDOW})=1
+            and max(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.clamp[{#VPN_IFACE}],{$VPN.HYST.WINDOW})=0
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.clamp[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1
+          name: 'WireGuard {#VPN_IFACE}: транзитный трафик без ограничения MSS на {HOST.NAME}'
+          opdata: транзит={ITEM.LASTVALUE1}, ограничение MSS={ITEM.LASTVALUE2}
+          priority: INFO
+          description: Шлюз пересылает TCP через туннель без дополнительной защиты ограничением MSS. При
+            правильном MTU это допустимо, поскольку работает PMTUD. При завышении MTU или отказе PMTUD,
+            например из-за асимметричной маршрутизации, возможны незаметные потери пакетов. Событие информационное,
+            без отдельного оповещения. Подавляется предупреждением о завышенном MTU на том же интерфейсе.
+          dependencies:
+          - name: 'WireGuard {#VPN_IFACE}: завышен MTU на {HOST.NAME}'
+            expression: min(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>{$VPN.MTU.MAX}
+              and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.posture.mtu[{#VPN_IFACE}],{$VPN.HYST.WINDOW})>1
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          tags:
+          - tag: scope
+            value: mtu-posture
+    - uuid: 64f1521864814e4c814528db500ad8ee
+      name: Обнаружение целей проверки OpenVPN
+      type: ZABBIX_ACTIVE
+      key: openvpn.discovery[{$VPN.PROBE.TARGETS}]
+      delay: 5m
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#VPN_TARGET}'
+          value: ^.+$
+          formulaid: A
+      item_prototypes:
+      - uuid: f560964475214b23b756e97798c72125
+        name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: разница PMTU'
+        type: ZABBIX_ACTIVE
+        key: vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn]
+        delay: '{$VPN.PROBE.INTERVAL}'
+        value_type: FLOAT
+        description: 'Универсальная проверка для OpenVPN. -2 — туннель отключён, только данные; -1 — туннель
+          работает, но ICMP не отвечает, что часто бывает у клиентов OpenVPN-AS с локальным межсетевым
+          экраном; 0 — исправен; >0 — разница MTU в байтах при потере крупных пакетов. {#VPN_DYNAMIC}=1
+          обозначает перемещающегося клиента Access Server. Его данные сохраняются, но оповещения отключены
+          через {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}. В ключе используется литерал ''openvpn'' вместо
+          {#VPN_TECH}: Zabbix требует уникальных ключей прототипов в шаблоне, а форму с {#VPN_TECH} уже
+          использует правило zerotier.'
+        valuemap:
+          name: Состояние проверки PMTU VPN
+        tags:
+        - tag: scope
+          value: mtu
+        - tag: vpn_iface
+          value: '{#VPN_IFACE}'
+        - tag: vpn_tech
+          value: openvpn
+        - tag: vpn_dynamic
+          value: '{#VPN_DYNAMIC}'
+        trigger_prototypes:
+        - uuid: cb7e83c946074d85a4a42f5ff2f4290e
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=0
+            and min(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>0
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1
+            and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1
+          name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: потеря крупных пакетов из-за MTU'
+          opdata: разница {ITEM.LASTVALUE} B
+          priority: AVERAGE
+          manual_close: 'YES'
+          description: Маленькие пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля
+            или исправьте путь. mssfix защищает только TCP; значение >0 здесь означает потери трафика
+            вне TCP, включая UDP.
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          tags:
+          - tag: scope
+            value: mtu
+          - tag: vpn_dynamic
+            value: '{#VPN_DYNAMIC}'
+        - uuid: af9313bf392643f3aa79ab5ef932a359
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and
+            nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel
+            MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix
+            agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.PROBE.NODATA})=1 and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1
+          name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: нет данных PMTU на {HOST.NAME}'
+          priority: WARNING
+          manual_close: 'YES'
+          description: Метрика PMTU этой цели не поступает в течение {$VPN.PROBE.NODATA}. Отключённые
+            цели и цели, которые не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает
+            потерю данных проверки. Доступность туннеля оно не определяет. Правило обнаружения сразу отключает
+            исчезнувших клиентов OpenVPN. Проверки состояния общей доставки данных и общего механизма
+            PMTU внутри выражения предотвращают событие при общем сбое и закрывают уже открытое событие,
+            если общий сбой начинается позже.
+          tags:
+          - tag: scope
+            value: availability
+          - tag: vpn_dynamic
+            value: '{#VPN_DYNAMIC}'
+        - uuid: b70483c208ad475b9b18a1c2fd284a99
+          expression: max(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})=-1
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},openvpn],{$VPN.HYST.WINDOW})>1
+            and {$VPN.DYNAMIC.PAGING:"{#VPN_DYNAMIC}"}=1
+          name: 'VPN openvpn {#VPN_IFACE}->{#VPN_TARGET}: цель проверки недоступна'
+          status: DISABLED
+          priority: AVERAGE
+          description: Только данные, триггер отключён. Устойчивое -1 означает работающий туннель, цель
+            которого не отвечает на ICMP. У клиентов OpenVPN-AS локальный межсетевой экран часто блокирует
+            ICMP; это ожидаемо и не вызывает оповещений.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          - name: 'VPN: проверка PMTU не работает на {HOST.NAME}'
+            expression: (nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and
+              nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN
+              Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU
+              by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})>1)
+          tags:
+          - tag: scope
+            value: liveness
+          - tag: vpn_dynamic
+            value: '{#VPN_DYNAMIC}'
+    - uuid: f81f8b0abfa04b8c93b6fb39345eb800
+      name: Обнаружение целей проверки WireGuard
+      type: ZABBIX_ACTIVE
+      key: wg.discovery[{$WG.PROBE.TARGETS}]
+      delay: 5m
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#WG_TARGET}'
+          value: ^.+$
+          formulaid: A
+      item_prototypes:
+      - uuid: cf1c14b65f9c46e88022b8507537eacf
+        name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: разница PMTU'
+        type: ZABBIX_ACTIVE
+        key: wg.pmtu[{#WG_IFACE},{#WG_TARGET}]
+        delay: '{$VPN.PROBE.INTERVAL}'
+        value_type: FLOAT
+        description: '-2 — туннель отключён из-за отсутствующего или устаревшего handshake WireGuard,
+          только данные без оповещения; -1 — туннель работает, но ICMP не отвечает; 0 — исправен; >0 —
+          настроенный MTU минус максимальный доставляемый размер, то есть разница в байтах при потере
+          крупных пакетов. Метрика содержит тег wg_iface для совместимости с существующими фильтрами и
+          дашбордами, а также общий для технологий тег vpn_iface, который используют проверки конфигурации
+          и OpenVPN/ZeroTier. Этот тег объединяет сведения об одном интерфейсе в одном фильтре. Тег vpn_tech
+          не задан, поскольку wg.discovery объединяет WireGuard и AmneziaWG (wg_discovery.sh: `wg show
+          interfaces` + `awg show interfaces`). Литерал «wireguard» ошибочно помечал бы все туннели awg.'
+        valuemap:
+          name: Состояние проверки PMTU VPN
+        tags:
+        - tag: scope
+          value: mtu
+        - tag: wg_iface
+          value: '{#WG_IFACE}'
+        - tag: vpn_iface
+          value: '{#WG_IFACE}'
+        trigger_prototypes:
+        - uuid: 79cc4f2e90704b87823885a1b3134d88
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=0
+            and min(/VPN Tunnel MTU by Zabbix agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>0
+            and count(/VPN Tunnel MTU by Zabbix agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1
+          name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: потеря крупных пакетов из-за MTU'
+          opdata: разница {ITEM.LASTVALUE} B
+          priority: AVERAGE
+          description: Маленькие пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля
+            или исправьте путь.
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          tags:
+          - tag: scope
+            value: mtu
+        - uuid: 78cbe7a2eb2e4b28bfab2818c8d36ea7
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and
+            nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel
+            MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix
+            agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.PROBE.NODATA})=1
+          name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: нет данных PMTU на {HOST.NAME}'
+          priority: WARNING
+          description: Метрика PMTU этого узла не поступает в течение {$VPN.PROBE.NODATA}. Отключённые
+            узлы и узлы, которые не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает
+            потерю данных проверки. Доступность узла оно не определяет. Проверки состояния общей доставки
+            данных и общего механизма PMTU внутри выражения предотвращают событие при общем сбое и закрывают
+            уже открытое событие, если общий сбой начинается позже.
+          tags:
+          - tag: scope
+            value: availability
+        - uuid: 35f95bc9d503484b8c5f7d90f8179c24
+          expression: max(/VPN Tunnel MTU by Zabbix agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})=-1
+            and count(/VPN Tunnel MTU by Zabbix agent RU/wg.pmtu[{#WG_IFACE},{#WG_TARGET}],{$VPN.HYST.WINDOW})>1
+          name: 'WireGuard {#WG_IFACE}->{#WG_TARGET}: цель проверки недоступна'
+          status: DISABLED
+          priority: AVERAGE
+          description: Только данные, триггер отключён. Оповещения о доступности дают ложные срабатывания
+            для перемещающихся и мобильных узлов. Отключённые узлы возвращают -2 по результату проверки
+            handshake; устойчивое -1 означает работающий туннель, цель которого перестала отвечать на
+            ICMP. Если нужны точные оповещения об отключении узла, включайте их для отдельных узлов только
+            через явное разрешающее условие.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          - name: 'VPN: проверка PMTU не работает на {HOST.NAME}'
+            expression: (nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and
+              nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN
+              Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU
+              by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})>1)
+          tags:
+          - tag: scope
+            value: liveness
+    - uuid: ffba6e945ff349d0b167c55ff6df104a
+      name: Обнаружение целей проверки ZeroTier
+      type: ZABBIX_ACTIVE
+      key: zerotier.discovery[{$VPN.PROBE.TARGETS}]
+      delay: 5m
+      filter:
+        evaltype: AND
+        conditions:
+        - macro: '{#VPN_TARGET}'
+          value: ^.+$
+          formulaid: A
+      item_prototypes:
+      - uuid: e0a9417199e449afbdc19b947d5bf143
+        name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: разница PMTU'
+        type: ZABBIX_ACTIVE
+        key: vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}]
+        delay: '{$VPN.PROBE.INTERVAL}'
+        value_type: FLOAT
+        description: Универсальная проверка для технологий, отличных от WireGuard. -2 — туннель отключён,
+          только данные без оповещения; -1 — туннель работает, но ICMP не отвечает; 0 — исправен; >0 —
+          настроенный MTU минус максимальный доставляемый размер, то есть разница в байтах при потере
+          крупных пакетов.
+        valuemap:
+          name: Состояние проверки PMTU VPN
+        tags:
+        - tag: scope
+          value: mtu
+        - tag: vpn_iface
+          value: '{#VPN_IFACE}'
+        - tag: vpn_tech
+          value: '{#VPN_TECH}'
+        trigger_prototypes:
+        - uuid: 3f728c4c0988400086ebd302c1511d67
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=0
+            and min(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>0
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1
+          name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: потеря крупных пакетов из-за MTU'
+          opdata: разница {ITEM.LASTVALUE} B
+          priority: AVERAGE
+          description: Маленькие пакеты проходят, а пакеты размера MTU теряются. Уменьшите MTU туннеля
+            или исправьте путь.
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          tags:
+          - tag: scope
+            value: mtu
+        - uuid: 9cf02c56f3f740d79b4478a9426d2cc7
+          expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=0 and
+            nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and max(/VPN Tunnel
+            MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and nodata(/VPN Tunnel MTU by Zabbix
+            agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.PROBE.NODATA})=1
+          name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: нет данных PMTU на {HOST.NAME}'
+          priority: WARNING
+          description: Метрика PMTU этой цели не поступает в течение {$VPN.PROBE.NODATA}. Отключённые
+            цели и цели, которые не отвечают на ICMP, продолжают возвращать -2/-1, поэтому событие означает
+            потерю данных проверки. Доступность туннеля оно не определяет. Проверки состояния общей доставки
+            данных и общего механизма PMTU внутри выражения предотвращают событие при общем сбое и закрывают
+            уже открытое событие, если общий сбой начинается позже.
+          tags:
+          - tag: scope
+            value: availability
+        - uuid: ec8d295da70a4d81afeb6bfd16c1dcb7
+          expression: max(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})=-1
+            and count(/VPN Tunnel MTU by Zabbix agent RU/vpn.pmtu[{#VPN_IFACE},{#VPN_TARGET},{#VPN_TECH}],{$VPN.HYST.WINDOW})>1
+          name: 'VPN {#VPN_TECH} {#VPN_IFACE}->{#VPN_TARGET}: цель проверки недоступна'
+          status: DISABLED
+          priority: AVERAGE
+          description: Только данные, триггер отключён. Оповещения о доступности не отправляются из-за
+            ложных срабатываний для перемещающихся узлов. Отключённый туннель возвращает -2; устойчивое
+            -1 означает работающий туннель, цель которого перестала отвечать на ICMP.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'VPN: нет данных мониторинга на {HOST.NAME}'
+            expression: nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.WATCHDOG.WINDOW})=1
+          - name: 'VPN: проверка PMTU не работает на {HOST.NAME}'
+            expression: (nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=1 and
+              nodata(/VPN Tunnel MTU by Zabbix agent RU/wg.count,{$VPN.PROBE.INTERVAL})=0) or (max(/VPN
+              Tunnel MTU by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})=0 and count(/VPN Tunnel MTU
+              by Zabbix agent RU/wg.probe.ok,{$VPN.HYST.WINDOW})>1)
+          tags:
+          - tag: scope
+            value: liveness
+    tags:
+    - tag: class
+      value: network
+    - tag: component
+      value: vpn
+    macros:
+    - macro: '{$VPN.DYNAMIC.PAGING}'
+      value: '1'
+      description: Переключатель оповещений для отдельных целей с контекстом по макросу LLD {#VPN_DYNAMIC}.
+        Статические цели OpenVPN Community используют 0 и вызывают оповещения; перемещающиеся клиенты
+        Access Server используют 1 и сохраняются только как данные. Возвращайте контекстное значение в
+        1, только если оповещения PMTU для динамических клиентов нужны в эксплуатации.
+    - macro: '{$VPN.DYNAMIC.PAGING:"1"}'
+      value: '0'
+      description: Контекст по умолчанию отключает оповещения для динамических клиентов Access Server
+        и сохраняет историю метрик и тег событий vpn_dynamic=1.
+    - macro: '{$VPN.MTU.MAX}'
+      value: '1420'
+      description: Безопасный предел MTU для туннелей WireGuard поверх интернета/Xray. Проверка конфигурации
+        оповещает с уровнем «Предупреждение» при превышении MTU интерфейса. Переопределите значение на
+        хосте/в контексте, если туннелю нужен меньший MTU, например 1340 на промежуточном хосте. Асимметрия
+        ниже порога, например 1400 там, где требуется 1340, не обнаруживается; для неё нужно сравнивать
+        хосты.
+    - macro: '{$VPN.WATCHDOG.WINDOW}'
+      value: 30m
+      description: Окно отсутствия данных для контроля потери мониторинга. Если wg.count с интервалом
+        1m не поступает в течение этого времени, доставка через активные проверки Agent2/UserParameter
+        считается неисправной, а зависимые события туннелей и конфигурации подавляются. Значение 0 допустимо
+        на хостах без wg/awg, поэтому этот контроль работает и на хостах только с OpenVPN/ZeroTier. Он
+        не проверяет их ключи обнаружения или PMTU. Режим nodata по умолчанию учитывает доступность прокси;
+        её нужно контролировать отдельно. Макрос используется в триггере контроля доставки и всех зависимостях
+        от него. Увеличивайте значение на хосте, только если этого требует его фактический интервал активных
+        проверок.
+    - macro: '{$VPN.AGENT.WINDOW}'
+      value: 15m
+      description: 'Окно отсутствия данных для контроля доступности агента (agent.variant, 1m). После
+        этого времени весь канал активных проверок считается недоступным, а «VPN: нет данных мониторинга»
+        подавляется. За общую потерю связи отвечает собственное оповещение хоста о доступности агента.
+        Окно должно быть короче {$VPN.WATCHDOG.WINDOW}, чтобы родитель успел перейти в PROBLEM до срабатывания
+        дочернего триггера. Зависимости Zabbix не подавляют уже открытое событие. Значение по умолчанию
+        15m вдвое меньше 30m у контроля доставки. Увеличивайте оба окна вместе.'
+    - macro: '{$VPN.HYST.WINDOW}'
+      value: 25m
+      description: 'Окно гистерезиса. Триггер срабатывает, только если все значения в окне подтверждают
+        проблему и получено не меньше двух значений: каждое защищённое выражение содержит `count(...)>1`.
+        Ограничение числа значений необходимо, поскольку окно задаёт время, а не количество записей. После
+        перерыва сбора длиннее окна в нём остаётся одно новое значение, и min()/max() без ограничения
+        сработали бы по одному ошибочному чтению. Контроль wg.count этого не обнаружит, если остановилась
+        только одна метрика, а wg.count продолжает поступать.
+
+
+        Известное ограничение, проверенное на рабочем сервере: count() считает значения, а не опросы.
+        Если хост дублирует записи, один опрос уже удовлетворяет >1. Поэтому после перерыва длиннее окна
+        один опрос с дублирующей записью всё ещё может вызвать оповещение. Для этого должны совпасть оба
+        условия; поведение не хуже, чем у проверки числа значений до версии 1.2.0 на тех же хостах. Для
+        устранения ограничения потребовался бы подсчёт уникальных временных меток, которого нет в функциях
+        триггеров Zabbix.
+
+
+        Окно задано временем, а не числом записей (#N). При двойной записи значения за опрос, например
+        при proxy-group или двух ServerActive, #2 охватывает один опрос и отключает гистерезис. Временное
+        окно от дублирования не сокращается. Держите его длиннее удвоенного наибольшего интервала защищённых
+        метрик: {$VPN.PROBE.INTERVAL} и фиксированных 10m для конфигурации. Значение по умолчанию 25m
+        покрывает оба интервала. Общий контроль проверки wg.probe.ok с интервалом 5m также требует полного
+        окна, поэтому потеря cap_net_raw подтверждается примерно за 25m вместо 10m, раньше {$VPN.WATCHDOG.WINDOW}.'
+    - macro: '{$VPN.PROBE.INTERVAL}'
+      value: 10m
+      description: 'Интервал активных проверок PMTU отдельных туннелей (wg.pmtu/vpn.pmtu). Каждая проверка
+        дважды читает `wg show` через NOPASSWD sudo, не получая ключи. Ошибка MTU определяется устойчивой
+        конфигурацией, поэтому интервала 10m достаточно. По сравнению с прежними 5m число вызовов sudo
+        агентом уменьшается примерно вдвое; средства безопасности хоста могут оповещать о числе вызовов
+        sudo служебной учётной записью. Уменьшайте интервал, если нужно быстрее обнаруживать проблему
+        MTU. При увеличении интервала на хосте увеличьте и {$VPN.HYST.WINDOW} на том же хосте как минимум
+        вдвое относительно нового интервала. При интервале >12m30s окно 25m оставляет одно значение и
+        отключает гистерезис, от чего защищает {$VPN.HYST.WINDOW}. Статическая проверка этого не обнаружит:
+        тест видит значения шаблона по умолчанию, но не переопределения на хостах.'
+    - macro: '{$VPN.PROBE.NODATA}'
+      value: 45m
+      description: Окно отсутствия данных PMTU отдельной цели. Оно должно быть длиннее {$VPN.WATCHDOG.WINDOW}+{$VPN.PROBE.INTERVAL}.
+        Значение по умолчанию 45m даёт общему контролю доставки с окном 30m время сформировать единственную
+        родительскую проблему до события потери данных дочерней проверки. Отключённые цели и цели без
+        ICMP продолжают возвращать -2/-1, поэтому этот контроль на них не срабатывает. Режим nodata по
+        умолчанию учитывает доступность прокси и предотвращает множество событий после его отказа. Увеличивайте
+        макрос вместе с увеличением окна контроля доставки или интервала проверки.
+    - macro: '{$VPN.PROBE.TARGETS}'
+      description: Переопределения целей проверки по интерфейсам для туннелей OpenVPN/ZeroTier. Список
+        iface=ip через запятую, например "ztr4nqvec7=192.168.192.5,tun0=10.8.0.1". Передаётся в ключи
+        LLD обнаружения соответствующей технологии. Имена интерфейсов уникальны между технологиями.
+    - macro: '{$WG.PROBE.TARGETS}'
+      description: Переопределения целей проверки по интерфейсам для туннелей без маршрута /32 (подсеть/0.0.0.0/0).
+        Список iface=ip через запятую, например "wg0=192.0.2.3,wgX=10.0.0.1". Передаётся в ключ LLD wg.discovery.
+        Интерфейс без маршрута /32 и без переопределения остаётся без проверки, чтобы не создавать ложное
+        событие.
+    valuemaps:
+    - uuid: c53cc0d777ac4ac1ac48cbdca0576b10
+      name: Флаг конфигурации VPN
+      mappings:
+      - value: '0'
+        newvalue: нет
+      - value: '1'
+        newvalue: да
+    - uuid: d34b2df630f64df5ae916134722d1da3
+      name: Работоспособность проверки PMTU
+      mappings:
+      - value: '0'
+        newvalue: неисправна (общая проверка недоступна)
+      - value: '1'
+        newvalue: исправна
+    - uuid: 2b5e123be2284c06b9cdc103e8e49315
+      name: Состояние проверки PMTU VPN
+      mappings:
+      - value: '-2'
+        newvalue: отключён (нет handshake)
+      - value: '-1'
+        newvalue: недоступен (туннель работает, ICMP не отвечает)
+      - value: '0'
+        newvalue: исправен (разницы MTU нет)
