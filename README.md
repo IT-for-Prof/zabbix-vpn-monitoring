@@ -15,20 +15,26 @@ Proxies (Outline/Shadowsocks, Xray) are a *different* class (no L3 tunnel/handsh
 
 Import one of these Zabbix 7.0 exports:
 
-| Language | File | Technical template name |
-| --- | --- | --- |
-| English | [`vpn-tunnel-mtu.yaml`](templates/vpn-tunnel-mtu.yaml) | `VPN Tunnel MTU by Zabbix agent` |
-| Russian | [`vpn-tunnel-mtu.ru.yaml`](templates/vpn-tunnel-mtu.ru.yaml) | `VPN Tunnel MTU by Zabbix agent RU` |
+| Language | File |
+| --- | --- |
+| English | [`vpn-tunnel-mtu.yaml`](templates/vpn-tunnel-mtu.yaml) |
+| Russian | [`vpn-tunnel-mtu.ru.yaml`](templates/vpn-tunnel-mtu.ru.yaml) |
 
-Both templates can exist on the same server. Link exactly one language to each host: the item keys
-are identical, so Zabbix cannot link both variants to one host. Item and event text uses the chosen
-template's language for all operators. The collectors and installation steps are the same.
+Both files describe the same template: UUIDs, the technical name `VPN Tunnel MTU by Zabbix agent`,
+item keys, trigger expressions, macros, tags and severities are identical; only the visible text
+differs. A server runs one language. To switch, import the other file over the installed template
+with "Update existing": Zabbix matches objects by UUID and renames them in place, so history, host
+links and macro overrides survive. Review Actions that match event names, because translated events
+have different names.
+
+If you imported the Russian file from an earlier release, it is a separate template named
+`VPN Tunnel MTU by Zabbix agent RU`. Unlink it from hosts (Unlink, not Unlink and clear) and delete
+it before importing the current Russian file; otherwise the import fails on the duplicate visible name.
+Then link the imported template: host items with the same keys become its items and keep their history.
 
 The English export is the source of monitoring logic. The Russian export is generated from it and
-[`localization/ru.yaml`](templates/localization/ru.yaml), which stores translations and permanent
-Russian UUIDv4 identities. The template group is shared. Keep the English identities and the stored
-Russian identities stable across releases; changing them can prevent imports from updating existing
-objects. Edit the source or catalog, then rebuild the Russian export.
+[`localization/ru.yaml`](templates/localization/ru.yaml), which stores the translations. Edit the
+source or catalog, then rebuild the Russian export.
 
 Development requires Python 3, PyYAML and pytest. Rebuild and check both languages from the repository root:
 
@@ -37,14 +43,9 @@ python3 templates/localization/build_ru.py
 python3 -m pytest -q templates/localization/test_build_ru.py collectors/openvpn/test_openvpn_discovery.py
 ```
 
-The builder rejects missing translations, changed macro placeholders and invalid UUID mappings before
-writing the export. Tests compare the monitoring configuration and resolve translated references.
+The builder rejects missing or stale translations and changed macro placeholders before writing the
+export. Tests check that both exports are equal apart from display text and resolve translated references.
 The localization tools run only on the development machine; agent installation is unchanged.
-
-Switching an existing host between languages is a separate migration. Before switching, verify item
-history and existing problems on a test host. **Unlink and clear deletes inherited entities.** Review
-Actions that match event names, because translated events have different names; tags and severity
-values are the same in both variants.
 
 ## How detection works
 
